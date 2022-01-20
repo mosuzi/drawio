@@ -552,6 +552,7 @@ Draw.loadPlugin(function(ui)
 		
 		var inner = this.container.querySelector('.geTitle'), urlInput = inner.querySelector('input[type="text"]'), urlCheck = urlInput.previousSibling;
 		
+		urlInput.style.width = '680px';
 		var lbl = document.createElement('div');
 		mxUtils.write(lbl, mxResources.get('confAnchor') + ':');
 		inner.appendChild(lbl);
@@ -889,7 +890,7 @@ Draw.loadPlugin(function(ui)
 	ui.showLinkDialog = function(value, btnLabel, fn)
 	{
 		var dlg = new LinkDialog(this, value, btnLabel, fn, true);
-		this.showDialog(dlg.container, 700, 470, true, true);
+		this.showDialog(dlg.container, 710, 470, true, true);
 		dlg.init();
 	};
 	
@@ -1307,6 +1308,11 @@ Draw.loadPlugin(function(ui)
 	 * Delay for last save in ms.
 	 */
 	EmbedFile.prototype.saveDelay = 0;
+	
+	EmbedFile.prototype.isRevisionHistorySupported = function()
+	{
+		return true;
+	};
 
 	/**
 	 * 
@@ -1484,6 +1490,8 @@ Draw.loadPlugin(function(ui)
 										
 										if (this.sync != null)
 										{
+											//Reduce number of retials since we already retry in AC.saveDraftWithFileDesc
+											this.sync.maxCatchupRetries = 2;
 											this.savingFile = true;
 											
 											this.sync.fileConflict(desc, mxUtils.bind(this, function()

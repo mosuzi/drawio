@@ -1444,6 +1444,7 @@ DrawioFile.prototype.saveDraft = function()
 			modified: new Date().getTime(),
 			data: this.ui.getFileData(),
 			title: this.getTitle(),
+			fileObject: this.fileObject,
 			aliveCheck: this.ui.draftAliveCheck};
 		this.ui.setDatabaseItem('.draft_' + this.draftId,
 			JSON.stringify(draft));
@@ -1487,9 +1488,8 @@ DrawioFile.prototype.addUnsavedStatus = function(err)
 		{
 			var status = mxUtils.htmlEntities(mxResources.get('unsavedChanges'));
 			
-			this.ui.editor.setStatus('<div title="'+ status +
-				'" class="geStatusAlert" style="overflow:hidden;">' + status +
-				' (' + mxUtils.htmlEntities(err.message) + ')</div>');
+			this.ui.editor.setStatus('<div title="'+ status + '" class="geStatusAlert">' +
+				status + ' (' + mxUtils.htmlEntities(err.message) + ')</div>');
 		}
 		else
 		{
@@ -1513,15 +1513,16 @@ DrawioFile.prototype.addUnsavedStatus = function(err)
 
 			var status = mxUtils.htmlEntities(mxResources.get('unsavedChangesClickHereToSave')) +
 				((msg != null && msg != '') ? ' (' + mxUtils.htmlEntities(msg) + ')' : '');
-			this.ui.editor.setStatus('<div title="'+ status +
-				'" class="geStatusAlertOrange" style="cursor:pointer;overflow:hidden;">' + status + ' <img src="' +
-				Editor.saveImage + '" align="top" style="width:16px;margin-top:' + ((mxClient.IS_FF) ? -3 : -2) + 'px"/></div>');
+			this.ui.editor.setStatus('<div title="'+ status + '" class="geStatusAlertOrange">' + status +
+				' <img src="' + Editor.saveImage + '"/></div>');
 			
 			// Installs click handler for saving
 			var links = this.ui.statusContainer.getElementsByTagName('div');
 			
 			if (links != null && links.length > 0)
 			{
+				links[0].style.cursor = 'pointer';
+
 				mxEvent.addListener(links[0], 'click', mxUtils.bind(this, function()
 				{
 					this.ui.actions.get((this.ui.mode == null || !this.isEditable()) ?
@@ -1532,8 +1533,7 @@ DrawioFile.prototype.addUnsavedStatus = function(err)
 			{
 				var status = mxUtils.htmlEntities(mxResources.get('unsavedChanges'));
 				
-				this.ui.editor.setStatus('<div title="'+ status +
-					'" class="geStatusAlert" style="overflow:hidden;">' + status +
+				this.ui.editor.setStatus('<div title="'+ status + '" class="geStatusAlert">' + status +
 					' (' + mxUtils.htmlEntities(err.message) + ')</div>');
 			}
 			
@@ -1573,6 +1573,8 @@ DrawioFile.prototype.addConflictStatus = function(fn, message)
 	
 	if (links != null && links.length > 0)
 	{
+		links[0].style.cursor = 'pointer';
+
 		mxEvent.addListener(links[0], 'click', mxUtils.bind(this, function(evt)
 		{
 			if (mxEvent.getSource(evt).nodeName != 'IMG')
@@ -1593,10 +1595,9 @@ DrawioFile.prototype.addConflictStatus = function(fn, message)
  */
 DrawioFile.prototype.setConflictStatus = function(message)
 {
-	this.ui.editor.setStatus('<div title="'+ message + '" class="geStatusAlert geBlink" style="cursor:pointer;overflow:hidden;">' +
-		message + ' <a href="https://www.diagrams.net/doc/faq/synchronize" target="_blank"><img border="0" ' +
-		'style="margin-left:2px;cursor:help;opacity:0.5;width:16px;height:16px;" valign="bottom" src="' + Editor.helpImage +
-		'" style=""/></a></div>');
+	this.ui.editor.setStatus('<div title="'+ message + '" class="geStatusAlert">' + message +
+		' <a href="https://www.diagrams.net/doc/faq/synchronize" title="' + mxResources.get('help') +
+		'" target="_blank">' + '<img src="' + Editor.helpImage + '"/></a></div>');
 };
 
 /**
@@ -1629,13 +1630,13 @@ DrawioFile.prototype.showRefreshDialog = function(success, error, message)
 			mxResources.get('makeCopy'), mxUtils.bind(this, function()
 		{
 			this.copyFile(success, error);
-		}), null, mxResources.get('synchronize'), mxUtils.bind(this, function()
+		}), null, mxResources.get('merge'), mxUtils.bind(this, function()
 		{
 			this.reloadFile(success, error);
 		}), mxResources.get('cancel'), mxUtils.bind(this, function()
 		{
 			this.ui.hideDialog();
-		}), 360, 150);
+		}), 380, 130);
 	}
 };
 
@@ -1657,7 +1658,7 @@ DrawioFile.prototype.showCopyDialog = function(success, error, overwrite)
 		mxResources.get('cancel'), mxUtils.bind(this, function()
 	{
 		this.ui.hideDialog();
-	}), 360, 150);
+	}), 380, 150);
 };
 
 /**
@@ -1668,12 +1669,12 @@ DrawioFile.prototype.showConflictDialog = function(overwrite, synchronize)
 	this.ui.showError(mxResources.get('externalChanges'),
 		mxResources.get('fileChangedSyncDialog'),
 		mxResources.get('overwrite'), overwrite, null,
-		mxResources.get('synchronize'), synchronize,
+		mxResources.get('merge'), synchronize,
 		mxResources.get('cancel'), mxUtils.bind(this, function()
 	{
 		this.ui.hideDialog();
 		this.handleFileError(null, false);
-	}), 340, 150);
+	}), 380, 130);
 };
 
 /**
@@ -1827,7 +1828,7 @@ DrawioFile.prototype.handleFileError = function(err, manual)
 					msg = msg.substring(0, 60) + '...';
 				}
 				
-				this.ui.editor.setStatus('<div class="geStatusAlert" style="cursor:pointer;overflow:hidden;">' +
+				this.ui.editor.setStatus('<div class="geStatusAlert">' +
 					mxUtils.htmlEntities(mxResources.get('error')) + ((msg != null) ?
 					' (' + mxUtils.htmlEntities(msg) + ')' : '') + '</div>');
 			}
@@ -1878,7 +1879,7 @@ DrawioFile.prototype.handleConflictError = function(err, manual)
 			}), error);
 		}
 	})
-	
+
 	if (DrawioFile.SYNC == 'none')
 	{
 		this.showCopyDialog(success, error, overwrite);

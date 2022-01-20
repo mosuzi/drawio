@@ -26,10 +26,10 @@ window.VSD_CONVERT_URL = window.VSD_CONVERT_URL || 'https://convert.diagrams.net
 window.EMF_CONVERT_URL = window.EMF_CONVERT_URL || 'https://convert.diagrams.net/emf2png/convertEMF';
 window.REALTIME_URL = window.REALTIME_URL || 'cache';
 window.DRAWIO_GITLAB_URL = window.DRAWIO_GITLAB_URL || 'https://gitlab.com';
-window.DRAWIO_GITLAB_ID = window.DRAWIO_GITLAB_ID || 'c9b9d3fcdce2dec7abe3ab21ad8123d89ac272abb7d0883f08923043e80f3e36';
+window.DRAWIO_GITLAB_ID = window.DRAWIO_GITLAB_ID || '2b14debc5feeb18ba65358d863ec870e4cc9294b28c3c941cb3014eb4af9a9b4';
 window.DRAWIO_GITHUB_URL = window.DRAWIO_GITHUB_URL || 'https://github.com';
 window.DRAWIO_GITHUB_API_URL = window.DRAWIO_GITHUB_API_URL || 'https://api.github.com';
-window.DRAWIO_GITHUB_ID = window.DRAWIO_GITHUB_ID || '4f88e2ec436d76c2ee6e';
+window.DRAWIO_GITHUB_ID = window.DRAWIO_GITHUB_ID || 'Iv1.98d62f0431e40543';
 window.DRAWIO_DROPBOX_ID = window.DRAWIO_DROPBOX_ID || 'libwls2fa9szdji';
 window.SAVE_URL = window.SAVE_URL || 'save';
 window.OPEN_URL = window.OPEN_URL || 'import';
@@ -83,7 +83,7 @@ window.mxLanguage = window.mxLanguage || (function()
 				
 				if (!lang && window.mxIsElectron)
 				{
-					lang = require('electron').remote.app.getLocale();
+					lang = urlParams['appLang'];
 					
 					if (lang != null)
 			    	{
@@ -178,6 +178,22 @@ if (window.mxLanguages == null)
 	}
 }
 
+//Disable Google Drive when running in a WebView (e.g, MS Teams App) Since auth doesn't work with disallowd_useragent
+//[For MS Teams only] TODO Check if other apps are affected also (android and iOS)
+if (urlParams['extAuth'] == '1' && /((iPhone|iPod|iPad).*AppleWebKit(?!.*Version)|; wv)/i.test(navigator.userAgent))
+{
+	urlParams['gapi'] = '0';
+	urlParams['noDevice'] = '1';
+	//Force viewer only
+	//TODO This should always be for MS Teams only
+	if (urlParams['lightbox'] != '1')
+	{
+		urlParams['lightbox'] = '1';
+		urlParams['layers'] = '1';
+		urlParams['viewerOnlyMsg'] = '1';
+	}
+}
+
 // Uses lightbox mode on viewer domain
 if (window.location.hostname == DRAWIO_LIGHTBOX_URL.substring(DRAWIO_LIGHTBOX_URL.indexOf('//') + 2))
 {
@@ -190,12 +206,39 @@ if (urlParams['lightbox'] == '1')
 	urlParams['chrome'] = '0';
 }
 
+// Embed inline is embed mode and sketch UI
+if (urlParams['embedInline'] == '1')
+{
+	urlParams['embed'] = '1';
+	urlParams['ui'] = 'sketch';
+	urlParams['plugins'] = '0';
+	urlParams['proto'] = 'json';
+	urlParams['prefetchFonts'] = '1';
+}
+
+/**
+ * Global function for loading local files via servlet
+ */
+function setCurrentXml(data, filename)
+{
+	if (window.parent != null && window.parent.openFile != null)
+	{
+		window.parent.openFile.setData(data, filename);
+	}
+};
+ 
 /**
  * Returns the global UI setting before running static draw.io code
  */
 window.uiTheme = window.uiTheme || (function() 
 {
 	var ui = urlParams['ui'];
+
+	//Use Sketch theme for MS Teams (and any future extAuth) by default
+	if (urlParams['extAuth'] == '1')
+	{
+		ui = 'sketch';
+	}
 
 	// Known issue: No JSON object at this point in quirks in IE8
 	if (ui == null && isLocalStorage && typeof JSON !== 'undefined' && urlParams['lightbox'] != '1')
@@ -217,50 +260,38 @@ window.uiTheme = window.uiTheme || (function()
 		}
 	}
 	
-	//Use Sketch theme for MS Teams (and any future extAuth) by default
-	if (ui == null && urlParams['extAuth'] == '1')
-	{
-		ui = 'sketch';
-	}
-	
-	// Redirects sketch UI to min UI with sketch URL parameter
-	if (ui == 'sketch')
-	{
-		urlParams['sketch'] = '1';
-		ui = 'min';
-	}
-	
 	// Uses minimal theme on small screens
 	try
 	{
 		if (ui == null)
 		{
-	        var iw = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+			var iw = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
 
-	        if (iw <= 768)
-	        {
-	        	ui = 'min';
-	        }
+			if (iw <= 768)
+			{
+				if (urlParams['pages'] == null)
+				{
+					urlParams['pages'] = '1';
+				}
+
+				ui = 'sketch';
+			}
 		}
 	}
 	catch (e)
 	{
 		// ignore
 	}
-	
+
+	// Redirects sketch UI to min UI with sketch URL parameter
+	if (ui == 'sketch')
+	{
+		urlParams['sketch'] = '1';
+		ui = 'min';
+	}
+		
 	return ui;
 })();
-
-/**
- * Global function for loading local files via servlet
- */
-function setCurrentXml(data, filename)
-{
-	if (window.parent != null && window.parent.openFile != null)
-	{
-		window.parent.openFile.setData(data, filename);
-	}
-};
 
 /**
  * Overrides splash URL parameter via local storage
@@ -275,14 +306,15 @@ function setCurrentXml(data, filename)
 		{
 			try
 			{
-				var value = localStorage.getItem('.drawio-config');
+				var key = (urlParams['sketch'] == '1') ? '.sketch-config' : '.drawio-config';
+				var value = localStorage.getItem(key);
 				var showSplash = true;
 				
 				if (value != null)
 				{
 					showSplash = JSON.parse(value).showStartScreen;
 				}
-				
+
 				// Undefined means true
 				if (showSplash == false)
 				{
@@ -404,8 +436,6 @@ if (window.location.hostname == 'embed.diagrams.net')
 {
 	urlParams['embed'] = '1';
 }
-
-
 
 // Fallback for cases where the hash property is not available
 if ((window.location.hash == null || window.location.hash.length <= 1) &&

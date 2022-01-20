@@ -95,7 +95,7 @@ Actions.prototype.init = function()
 	}).isEnabled = isGraphEnabled;
 	this.addAction('save', function() { ui.saveFile(false); }, null, null, Editor.ctrlKey + '+S').isEnabled = isGraphEnabled;
 	this.addAction('saveAs...', function() { ui.saveFile(true); }, null, null, Editor.ctrlKey + '+Shift+S').isEnabled = isGraphEnabled;
-	this.addAction('export...', function() { ui.showDialog(new ExportDialog(ui).container, 300, 304, true, true); });
+	this.addAction('export...', function() { ui.showDialog(new ExportDialog(ui).container, 300, 340, true, true); });
 	this.addAction('editDiagram...', function()
 	{
 		var dlg = new EditDiagramDialog(ui);
@@ -478,6 +478,42 @@ Actions.prototype.init = function()
 			ui.handleError(e);
 		}
 	}, null, null, Editor.ctrlKey + '+D');
+	this.put('mergeCells', new Action(mxResources.get('merge'), function()
+	{
+		var ss = ui.getSelectionState();
+
+		if (ss.mergeCell != null)
+		{
+			graph.getModel().beginUpdate();
+			try
+			{
+				graph.setCellStyles('rowspan', ss.rowspan, [ss.mergeCell]);
+				graph.setCellStyles('colspan', ss.colspan, [ss.mergeCell]);
+			}
+			finally
+			{
+				graph.getModel().endUpdate();
+			}
+		}
+	}));
+	this.put('unmergeCells', new Action(mxResources.get('unmerge'), function()
+	{
+		var ss = ui.getSelectionState();
+
+		if (ss.cells.length > 0)
+		{
+			graph.getModel().beginUpdate();
+			try
+			{
+				graph.setCellStyles('rowspan', null, ss.cells);
+				graph.setCellStyles('colspan', null, ss.cells);
+			}
+			finally
+			{
+				graph.getModel().endUpdate();
+			}
+		}
+	}));
 	this.put('turn', new Action(mxResources.get('turn') + ' / ' + mxResources.get('reverse'), function(evt, trigger)
 	{
 		// Context menu click uses trigger, toolbar menu click uses evt
@@ -485,7 +521,7 @@ Actions.prototype.init = function()
 
 		graph.turnShapes(graph.getResizableCells(graph.getSelectionCells()),
 			(evt != null) ? mxEvent.isShiftDown(evt) : false);
-	}, null, null, Editor.ctrlKey + '+R'));
+	}, null, null, (mxClient.IS_SF) ? null : Editor.ctrlKey + '+R'));
 	this.put('selectConnections', new Action(mxResources.get('selectEdges'), function(evt)
 	{
 		var cell = graph.getSelectionCell();
@@ -841,7 +877,7 @@ Actions.prototype.init = function()
 					
 					if (graph.getModel().getChildCount(cell) > 0)
 					{
-						graph.updateGroupBounds([cell], 20);
+						graph.updateGroupBounds([cell], 0, true);
 					}
 					else
 					{
@@ -855,6 +891,10 @@ Actions.prototype.init = function()
 			}
 		}
 	}, null, null, Editor.ctrlKey + '+Shift+Y');
+	this.addAction('snapToGrid', function()
+	{
+		graph.snapCellsToGrid(graph.getSelectionCells(), graph.gridSize);
+	});
 	this.addAction('formattedText', function()
 	{
     	graph.stopEditing();
@@ -997,7 +1037,10 @@ Actions.prototype.init = function()
 
 		if (graph.backgroundImage != null)
 		{
-			bounds.add(new mxRectangle(0, 0, graph.backgroundImage.width, graph.backgroundImage.height));
+			bounds = mxRectangle.fromRectangle(bounds);
+			bounds.add(new mxRectangle(0, 0,
+				graph.backgroundImage.width,
+				graph.backgroundImage.height));
 		}
 		
 		if (bounds.width == 0 || bounds.height == 0)
@@ -1122,6 +1165,7 @@ Actions.prototype.init = function()
 	action = this.addAction('grid', function()
 	{
 		graph.setGridEnabled(!graph.isGridEnabled());
+		graph.defaultGridEnabled = graph.isGridEnabled();
 		ui.fireEvent(new mxEventObject('gridEnabledChanged'));
 	}, null, null, Editor.ctrlKey + '+Shift+G');
 	action.setToggleAction(true);
@@ -1543,7 +1587,7 @@ Actions.prototype.init = function()
 						var geo = graph.getCellGeometry(cell);
 			
 						// Resets fixed connection point
-						if (mxEvent.isShiftDown(evt))
+						if (trigger != null && mxEvent.isShiftDown(evt))
 						{
 							graph.setCellStyles(mxConstants.STYLE_EXIT_X, null, [cell]);
 							graph.setCellStyles(mxConstants.STYLE_EXIT_Y, null, [cell]);
@@ -1582,22 +1626,57 @@ Actions.prototype.init = function()
 			document.execCommand('superscript', false, null);
 		}
 	}), null, null, Editor.ctrlKey + '+.');
+
+	function applyClipPath(cell, clipPath, width, height, graph)
+	{
+		graph.getModel().beginUpdate();
+		try
+		{
+			var geo = graph.getCellGeometry(cell);
+				
+			if (geo != null && width && height) //Comparing the ratio mostly will fail since it's float
+			{
+				var scale = width / height;
+				geo = geo.clone();
+
+				if (scale > 1)
+				{
+					geo.height = geo.width / scale;
+				}
+				else
+				{
+					geo.width = geo.height * scale;
+				}
+
+				graph.getModel().setGeometry(cell, geo);
+			}
+
+			graph.setCellStyles(mxConstants.STYLE_CLIP_PATH, clipPath, [cell]); //Set/unset clipPath
+			graph.setCellStyles(mxConstants.STYLE_ASPECT, 'fixed', [cell]);
+		}
+		finally
+		{
+			graph.getModel().endUpdate();
+		}
+	};
+
 	this.addAction('image...', function()
 	{
 		if (graph.isEnabled() && !graph.isCellLocked(graph.getDefaultParent()))
 		{
 			var title = mxResources.get('image') + ' (' + mxResources.get('url') + '):';
 	    	var state = graph.getView().getState(graph.getSelectionCell());
-	    	var value = '';
+	    	var value = '', clipPath = null;
 	    	
 	    	if (state != null)
 	    	{
 	    		value = state.style[mxConstants.STYLE_IMAGE] || value;
-	    	}
+				clipPath = state.style[mxConstants.STYLE_CLIP_PATH] || clipPath;
+		    }
 	    	
 	    	var selectionState = graph.cellEditor.saveSelection();
 	    	
-	    	ui.showImageDialog(title, value, function(newValue, w, h)
+	    	ui.showImageDialog(title, value, function(newValue, w, h, clipPath, cW, cH)
 			{
 	    		// Inserts image into HTML text
 	    		if (graph.cellEditor.isContentEditing())
@@ -1624,13 +1703,18 @@ Actions.prototype.init = function()
 			    				var pt = graph.getCenterInsertPoint(graph.getBoundingBoxFromGeometry(cells, true));
 								cells[0].geometry.x = pt.x;
 			            	    cells[0].geometry.y = pt.y;
-			            	    
+
+								if (clipPath != null)
+								{
+			            	    	applyClipPath(cells[0], clipPath, cW, cH, graph);
+								}
+								
 			    				select = cells;
 		            	    	graph.fireEvent(new mxEventObject('cellsInserted', 'cells', select));
 			    			}
 			    			
 			        		graph.setCellStyles(mxConstants.STYLE_IMAGE, (newValue.length > 0) ? newValue : null, cells);
-			        		
+							
 			        		// Sets shape only if not already shape with image (label or image)
 			        		var style = graph.getCurrentCellStyle(cells[0]);
 			        		
@@ -1657,6 +1741,15 @@ Actions.prototype.init = function()
 						        		geo.height = h;
 						        		graph.getModel().setGeometry(cell, geo);
 					        		}
+
+									if (clipPath != null)
+									{
+										applyClipPath(cell, clipPath, cW, cH, graph);
+									}
+									else
+									{
+										graph.setCellStyles(mxConstants.STYLE_CLIP_PATH, null, cells); //Reset clip path
+									}
 					        	}
 				        	}
 			        	}
@@ -1672,7 +1765,31 @@ Actions.prototype.init = function()
 			        	}
 					}
 		    	}
-			}, graph.cellEditor.isContentEditing(), !graph.cellEditor.isContentEditing());
+			}, graph.cellEditor.isContentEditing(), !graph.cellEditor.isContentEditing(), true, clipPath);
+		}
+	}).isEnabled = isGraphEnabled;
+	
+	this.addAction('crop...', function()
+	{
+		var cell = graph.getSelectionCell();
+
+		if (graph.isEnabled() && !graph.isCellLocked(graph.getDefaultParent()) && cell != null)
+		{
+			var style = graph.getCurrentCellStyle(cell);
+
+	    	var value = style[mxConstants.STYLE_IMAGE], shape = style[mxConstants.STYLE_SHAPE];
+	    	
+			if (!value || shape != 'image')
+			{
+				return; //Can only process an existing image
+			}
+			
+			var dlg = new CropImageDialog(ui, value, style[mxConstants.STYLE_CLIP_PATH], function(clipPath, width, height)
+	    	{
+				applyClipPath(cell, clipPath, width, height, graph);
+	    	});
+	    	
+	    	ui.showDialog(dlg.container, 300, 390, true, true);
 		}
 	}).isEnabled = isGraphEnabled;
 	action = this.addAction('layers', mxUtils.bind(this, function()
@@ -1680,11 +1797,12 @@ Actions.prototype.init = function()
 		if (this.layersWindow == null)
 		{
 			// LATER: Check outline window for initial placement
-			this.layersWindow = new LayersWindow(ui, document.body.offsetWidth - 280, 120, 220, 196);
-			this.layersWindow.window.addListener('show', function()
+			this.layersWindow = new LayersWindow(ui, document.body.offsetWidth - 280, 120, 212, 200);
+			this.layersWindow.window.addListener('show', mxUtils.bind(this, function()
 			{
 				ui.fireEvent(new mxEventObject('layers'));
-			});
+				this.layersWindow.window.fit();
+			}));
 			this.layersWindow.window.addListener('hide', function()
 			{
 				ui.fireEvent(new mxEventObject('layers'));
@@ -1713,10 +1831,11 @@ Actions.prototype.init = function()
 		{
 			// LATER: Check layers window for initial placement
 			this.outlineWindow = new OutlineWindow(ui, document.body.offsetWidth - 260, 100, 180, 180);
-			this.outlineWindow.window.addListener('show', function()
+			this.outlineWindow.window.addListener('show', mxUtils.bind(this, function()
 			{
 				ui.fireEvent(new mxEventObject('outline'));
-			});
+				this.outlineWindow.window.fit();
+			}));
 			this.outlineWindow.window.addListener('hide', function()
 			{
 				ui.fireEvent(new mxEventObject('outline'));

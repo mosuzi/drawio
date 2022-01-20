@@ -101,6 +101,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn)
 		table.setAttribute('cellspacing', '0');
 		table.style.marginBottom = '20px';
 		table.style.cellSpacing = '0px';
+		table.style.marginLeft = '1px';
 		var tbody = document.createElement('tbody');
 		table.appendChild(tbody);
 
@@ -115,7 +116,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn)
 				(mxUtils.bind(this, function(clr)
 				{
 					var td = document.createElement('td');
-					td.style.border = '1px solid black';
+					td.style.border = '0px solid black';
 					td.style.padding = '0px';
 					td.style.width = '16px';
 					td.style.height = '16px';
@@ -124,14 +125,20 @@ var ColorDialog = function(editorUi, color, apply, cancelFn)
 					{
 						clr = defaultColor;
 					}
-					
-					if (clr == 'none')
+
+					if (clr != null)
 					{
-						td.style.background = 'url(\'' + Dialog.prototype.noColorImage + '\')';
-					}
-					else if (clr != null)
-					{
-						td.style.backgroundColor = '#' + clr;
+						td.style.borderWidth = '1px';
+
+						if (clr == 'none')
+						{
+							td.style.background = 'url(\'' + Dialog.prototype.noColorImage + '\')';
+						}
+						else
+						{
+							td.style.backgroundColor = '#' + clr;
+						}
+
 						var name = this.colorNames[clr.toUpperCase()];
 
 						if (name != null)
@@ -198,7 +205,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn)
 
 	if (!mxClient.IS_IE && !mxClient.IS_IE11)
 	{
-		input.style.width = '176px';
+		input.style.width = '182px';
 
 		var clrInput = document.createElement('input');
 		clrInput.setAttribute('type', 'color');
@@ -206,7 +213,8 @@ var ColorDialog = function(editorUi, color, apply, cancelFn)
 		clrInput.style.width = '0px';
 		clrInput.style.height = '0px';
 		clrInput.style.border = 'none';
-		clrInput.style.marginLeft = '10px';
+		clrInput.style.marginLeft = '2px';
+		div.style.whiteSpace = 'nowrap';
 		div.appendChild(clrInput);
 
 		div.appendChild(mxUtils.button('...', function()
@@ -424,29 +432,47 @@ var AboutDialog = function(editorUi)
  * Constructs a new textarea dialog.
  */
 var TextareaDialog = function(editorUi, title, url, fn, cancelFn, cancelTitle, w, h,
-	addButtons, noHide, noWrap, applyTitle, helpLink, customButtons)
+	addButtons, noHide, noWrap, applyTitle, helpLink, customButtons, header)
 {
 	w = (w != null) ? w : 300;
 	h = (h != null) ? h : 120;
 	noHide = (noHide != null) ? noHide : false;
-	var row, td;
-	
-	var table = document.createElement('table');
-	var tbody = document.createElement('tbody');
-	
-	row = document.createElement('tr');
-	
-	td = document.createElement('td');
-	td.style.fontSize = '10pt';
-	td.style.width = '100px';
-	mxUtils.write(td, title);
-	
-	row.appendChild(td);
-	tbody.appendChild(row);
 
-	row = document.createElement('tr');
-	td = document.createElement('td');
+	var div = document.createElement('div');
+	div.style.position = 'absolute';
+	div.style.top = '20px';
+	div.style.bottom = '20px';
+	div.style.left = '20px';
+	div.style.right = '20px';
 
+	var top = document.createElement('div');
+
+	top.style.position = 'absolute';
+	top.style.left = '0px';
+	top.style.right = '0px';
+
+	var main = top.cloneNode(false);
+	var buttons = top.cloneNode(false);
+
+	top.style.top = '0px';
+	top.style.height = '20px';
+	main.style.top = '20px';
+	main.style.bottom = '64px';
+	buttons.style.bottom = '0px';
+	buttons.style.height = '60px';
+	buttons.style.textAlign = 'center';
+
+	mxUtils.write(top, title);
+
+	div.appendChild(top);
+	div.appendChild(main);
+	div.appendChild(buttons);
+
+	if (header != null)
+	{
+		top.appendChild(header);
+	}
+	
 	var nameInput = document.createElement('textarea');
 	
 	if (noWrap)
@@ -461,8 +487,13 @@ var TextareaDialog = function(editorUi, title, url, fn, cancelFn, cancelTitle, w
 	
 	mxUtils.write(nameInput, url || '');
 	nameInput.style.resize = 'none';
-	nameInput.style.width = w + 'px';
-	nameInput.style.height = h + 'px';
+	nameInput.style.outline = 'none';
+	nameInput.style.position = 'absolute';
+	nameInput.style.boxSizing = 'border-box';
+	nameInput.style.top = '0px';
+	nameInput.style.left = '0px';
+	nameInput.style.height = '100%';
+	nameInput.style.width = '100%';
 	
 	this.textarea = nameInput;
 
@@ -472,17 +503,8 @@ var TextareaDialog = function(editorUi, title, url, fn, cancelFn, cancelTitle, w
 		nameInput.scrollTop = 0;
 	};
 
-	td.appendChild(nameInput);
-	row.appendChild(td);
-	
-	tbody.appendChild(row);
+	main.appendChild(nameInput);
 
-	row = document.createElement('tr');
-	td = document.createElement('td');
-	td.style.paddingTop = '14px';
-	td.style.whiteSpace = 'nowrap';
-	td.setAttribute('align', 'right');
-	
 	if (helpLink != null)
 	{
 		var helpBtn = mxUtils.button(mxResources.get('help'), function()
@@ -491,23 +513,29 @@ var TextareaDialog = function(editorUi, title, url, fn, cancelFn, cancelTitle, w
 		});
 		helpBtn.className = 'geBtn';
 		
-		td.appendChild(helpBtn);
+		buttons.appendChild(helpBtn);
 	}
 	
 	if (customButtons != null)
 	{
 		for (var i = 0; i < customButtons.length; i++)
 		{
-			(function(label, fn)
+			(function(label, fn, title)
 			{
 				var customBtn = mxUtils.button(label, function(e)
 				{
 					fn(e, nameInput);
 				});
+
+				if (title != null)
+				{
+					customBtn.setAttribute('title', title);
+				}
+
 				customBtn.className = 'geBtn';
 				
-				td.appendChild(customBtn);
-			})(customButtons[i][0], customButtons[i][1]);
+				buttons.appendChild(customBtn);
+			})(customButtons[i][0], customButtons[i][1], customButtons[i][2]);
 		}
 	}
 	
@@ -520,16 +548,18 @@ var TextareaDialog = function(editorUi, title, url, fn, cancelFn, cancelTitle, w
 			cancelFn();
 		}
 	});
+
+	cancelBtn.setAttribute('title', 'Escape');
 	cancelBtn.className = 'geBtn';
 	
 	if (editorUi.editor.cancelFirst)
 	{
-		td.appendChild(cancelBtn);
+		buttons.appendChild(cancelBtn);
 	}
 	
 	if (addButtons != null)
 	{
-		addButtons(td, nameInput);
+		addButtons(buttons, nameInput);
 	}
 	
 	if (fn != null)
@@ -544,19 +574,25 @@ var TextareaDialog = function(editorUi, title, url, fn, cancelFn, cancelTitle, w
 			fn(nameInput.value);
 		});
 		
-		genericBtn.className = 'geBtn gePrimaryBtn';	
-		td.appendChild(genericBtn);
+		genericBtn.setAttribute('title', 'Ctrl+Enter');
+		genericBtn.className = 'geBtn gePrimaryBtn';
+		buttons.appendChild(genericBtn);
+
+		mxEvent.addListener(nameInput, 'keypress', function(e)
+		{
+			if (e.keyCode == 13 && mxEvent.isControlDown(e))
+			{
+				genericBtn.click();
+			}
+		});
 	}
 	
 	if (!editorUi.editor.cancelFirst)
 	{
-		td.appendChild(cancelBtn);
+		buttons.appendChild(cancelBtn);
 	}
 
-	row.appendChild(td);
-	tbody.appendChild(row);
-	table.appendChild(tbody);
-	this.container = table;
+	this.container = div;
 };
 
 /**
@@ -1533,7 +1569,13 @@ var EditDataDialog = function(ui, cell)
 	}
 	
 	var top = document.createElement('div');
-	top.style.cssText = 'position:absolute;left:30px;right:30px;overflow-y:auto;top:30px;bottom:80px;';
+	top.style.position = 'absolute';
+	top.style.top = '30px';
+	top.style.left = '30px';
+	top.style.right = '30px';
+	top.style.bottom = '80px';
+	top.style.overflowY = 'auto';
+	
 	top.appendChild(form.table);
 
 	var newProp = document.createElement('div');
@@ -1604,6 +1646,14 @@ var EditDataDialog = function(ui, cell)
 			mxUtils.alert(mxResources.get('invalidName'));
 		}
 	});
+
+	mxEvent.addListener(nameInput, 'keypress', function(e)
+	{
+		if (e.keyCode == 13 )
+		{
+			addBtn.click();
+		}
+	});
 	
 	this.init = function()
 	{
@@ -1632,6 +1682,8 @@ var EditDataDialog = function(ui, cell)
 		ui.hideDialog.apply(ui, arguments);
 	});
 	
+
+	cancelBtn.setAttribute('title', 'Escape');
 	cancelBtn.className = 'geBtn';
 	
 	var applyBtn = mxUtils.button(mxResources.get('apply'), function()
@@ -1672,7 +1724,17 @@ var EditDataDialog = function(ui, cell)
 			mxUtils.alert(e);
 		}
 	});
+
+	applyBtn.setAttribute('title', 'Ctrl+Enter');
 	applyBtn.className = 'geBtn gePrimaryBtn';
+
+	mxEvent.addListener(div, 'keypress', function(e)
+	{
+		if (e.keyCode == 13 && mxEvent.isControlDown(e))
+		{
+			applyBtn.click();
+		}
+	});
 	
 	function updateAddBtn()
 	{
@@ -1971,6 +2033,7 @@ var OutlineWindow = function(editorUi, x, y, w, h)
 
 	var zoomInAction = editorUi.actions.get('zoomIn');
 	var zoomOutAction = editorUi.actions.get('zoomOut');
+
 	mxEvent.addMouseWheelListener(function(evt, up)
 	{
 		var outlineWheel = false;
@@ -1989,14 +2052,16 @@ var OutlineWindow = function(editorUi, x, y, w, h)
 
 		if (outlineWheel)
 		{
-			if (up)
+			var factor = graph.zoomFactor;
+
+			// Slower zoom for pinch gesture on trackpad
+			if (evt.deltaY != null && Math.round(evt.deltaY) != evt.deltaY)
 			{
-				zoomInAction.funct();
+				factor = 1 + (Math.abs(evt.deltaY) / 20) * (factor - 1);
 			}
-			else
-			{
-				zoomOutAction.funct();
-			}
+
+			graph.lazyZoom(up, null, null, factor);
+			mxEvent.consume(evt);
 		}
 	});
 };
@@ -2068,8 +2133,19 @@ var LayersWindow = function(editorUi, x, y, w, h)
 	var link = document.createElement('a');
 	link.className = 'geButton';
 	
-	var removeLink = link.cloneNode();
-	removeLink.innerHTML = '<div class="geSprite geSprite-delete" style="display:inline-block;"></div>';
+	var removeLink = link.cloneNode(false);
+	var img = document.createElement('img');
+	img.setAttribute('border', '0');
+	img.setAttribute('width', '22');
+	img.setAttribute('src', Editor.trashImage);
+	img.style.opacity = '0.9';
+
+	if (Editor.isDarkMode())
+	{
+		img.style.filter = 'invert(100%)';
+	}
+
+	removeLink.appendChild(img);
 
 	mxEvent.addListener(removeLink, 'click', function(evt)
 	{
@@ -2114,8 +2190,11 @@ var LayersWindow = function(editorUi, x, y, w, h)
 
 	var insertLink = link.cloneNode();
 	insertLink.setAttribute('title', mxUtils.trim(mxResources.get('moveSelectionTo', ['...'])));
-	insertLink.innerHTML = '<div class="geSprite geSprite-insert" style="display:inline-block;"></div>';
-	
+
+	img = img.cloneNode(false);
+	img.setAttribute('src', Editor.verticalDotsImage);
+	insertLink.appendChild(img);
+
 	mxEvent.addListener(insertLink, 'click', function(evt)
 	{
 		if (graph.isEnabled() && !graph.isSelectionEmpty())
@@ -2147,9 +2226,12 @@ var LayersWindow = function(editorUi, x, y, w, h)
 
 	ldiv.appendChild(insertLink);
 	
-	var dataLink = link.cloneNode();
-	dataLink.innerHTML = '<div class="geSprite geSprite-dots" style="display:inline-block;"></div>';
-	dataLink.setAttribute('title', mxResources.get('rename'));
+	var dataLink = link.cloneNode(false);
+	dataLink.setAttribute('title', mxResources.get('editData'));
+
+	img = img.cloneNode(false);
+	img.setAttribute('src', Editor.editImage);
+	dataLink.appendChild(img);
 
 	mxEvent.addListener(dataLink, 'click', function(evt)
 	{
@@ -2185,9 +2267,13 @@ var LayersWindow = function(editorUi, x, y, w, h)
 		}
 	};
 	
-	var duplicateLink = link.cloneNode();
-	duplicateLink.innerHTML = '<div class="geSprite geSprite-duplicate" style="display:inline-block;"></div>';
-	
+	var duplicateLink = link.cloneNode(false);
+	duplicateLink.setAttribute('title', mxResources.get('duplicate'));
+
+	img = img.cloneNode(false);
+	img.setAttribute('src', Editor.duplicateImage);
+	duplicateLink.appendChild(img);
+
 	mxEvent.addListener(duplicateLink, 'click', function(evt)
 	{
 		if (graph.isEnabled())
@@ -2221,9 +2307,12 @@ var LayersWindow = function(editorUi, x, y, w, h)
 
 	ldiv.appendChild(duplicateLink);
 
-	var addLink = link.cloneNode();
-	addLink.innerHTML = '<div class="geSprite geSprite-plus" style="display:inline-block;"></div>';
+	var addLink = link.cloneNode(false);
 	addLink.setAttribute('title', mxResources.get('addLayer'));
+
+	img = img.cloneNode(false);
+	img.setAttribute('src', Editor.addImage);
+	addLink.appendChild(img);
 	
 	mxEvent.addListener(addLink, 'click', function(evt)
 	{
@@ -2261,8 +2350,8 @@ var LayersWindow = function(editorUi, x, y, w, h)
 	dot.style.position = 'absolute';
 	dot.style.fontWeight = 'bold';
 	dot.style.fontSize = '16pt';
-	dot.style.right = '6px';
-	dot.style.top = '5px';
+	dot.style.right = '2px';
+	dot.style.top = '2px';
 	
 	function updateLayerDot()
 	{
@@ -2341,22 +2430,67 @@ var LayersWindow = function(editorUi, x, y, w, h)
 				evt.preventDefault();
 			});
 
+			var inp = document.createElement('img');
+			inp.setAttribute('draggable', 'false');
+			inp.setAttribute('align', 'top');
+			inp.setAttribute('border', '0');
+			inp.style.width = '16px';
+			inp.style.padding = '0px 6px 0 4px';
+			inp.style.marginTop = '2px';
+			inp.style.cursor = 'pointer';
+			inp.setAttribute('title', mxResources.get(
+				graph.model.isVisible(child) ?
+				'hide' : 'show'));
+
+			if (graph.model.isVisible(child))
+			{
+				inp.setAttribute('src', Editor.visibleImage);
+				mxUtils.setOpacity(ldiv, 75);
+			}
+			else
+			{
+				inp.setAttribute('src', Editor.hiddenImage);
+				mxUtils.setOpacity(ldiv, 25);
+			}
+
+			if (Editor.isDarkMode())
+			{
+				inp.style.filter = 'invert(100%)';
+			}
+
+			left.appendChild(inp);
+			
+			mxEvent.addListener(inp, 'click', function(evt)
+			{
+				graph.model.setVisible(child, !graph.model.isVisible(child));
+				mxEvent.consume(evt);
+			});
+
 			var btn = document.createElement('img');
 			btn.setAttribute('draggable', 'false');
 			btn.setAttribute('align', 'top');
 			btn.setAttribute('border', '0');
-			btn.style.padding = '4px';
+			btn.style.width = '16px';
+			btn.style.padding = '0px 6px 0 0';
+			btn.style.marginTop = '2px';
 			btn.setAttribute('title', mxResources.get('lockUnlock'));
 
 			var style = graph.getCurrentCellStyle(child);
 
 			if (mxUtils.getValue(style, 'locked', '0') == '1')
 			{
-				btn.setAttribute('src', Dialog.prototype.lockedImage);
+				btn.setAttribute('src', Editor.lockedImage);
+				mxUtils.setOpacity(btn, 75);
 			}
 			else
 			{
-				btn.setAttribute('src', Dialog.prototype.unlockedImage);
+				btn.setAttribute('src', Editor.unlockedImage);
+				mxUtils.setOpacity(btn, 25);
+			}
+
+			if (Editor.isDarkMode())
+			{
+				btn.style.filter = 'invert(100%)';
 			}
 			
 			if (graph.isEnabled())
@@ -2392,28 +2526,18 @@ var LayersWindow = function(editorUi, x, y, w, h)
 
 			left.appendChild(btn);
 
-			var inp = document.createElement('input');
-			inp.setAttribute('type', 'checkbox');
-			inp.setAttribute('title', mxResources.get(graph.model.isVisible(child) ?
-				'hide' : 'show'));
-			inp.style.marginLeft = '4px';
-			inp.style.marginRight = '6px';
-			inp.style.marginTop = '4px';
-			left.appendChild(inp);
-			
-			if (graph.model.isVisible(child))
-			{
-				inp.setAttribute('checked', 'checked');
-				inp.defaultChecked = true;
-			}
+			var span = document.createElement('span');
+			mxUtils.write(span, label);
+			span.style.display = 'block';
+			span.style.whiteSpace = 'nowrap';
+			span.style.overflow = 'hidden';
+			span.style.textOverflow = 'ellipsis';
+			span.style.position = 'absolute';
+			span.style.left = '52px';
+			span.style.right = '8px';
+			span.style.top = '8px';
 
-			mxEvent.addListener(inp, 'click', function(evt)
-			{
-				graph.model.setVisible(child, !graph.model.isVisible(child));
-				mxEvent.consume(evt);
-			});
-
-			mxUtils.write(left, label);
+			left.appendChild(span);
 			ldiv.appendChild(left);
 			
 			if (graph.isEnabled())
@@ -2545,7 +2669,6 @@ var LayersWindow = function(editorUi, x, y, w, h)
 		var label = graph.convertValueToString(selectionLayer) || mxResources.get('background');
 		removeLink.setAttribute('title', mxResources.get('removeIt', [label]));
 		duplicateLink.setAttribute('title', mxResources.get('duplicateIt', [label]));
-		dataLink.setAttribute('title', mxResources.get('editData'));
 
 		if (graph.isSelectionEmpty())
 		{
@@ -2574,7 +2697,7 @@ var LayersWindow = function(editorUi, x, y, w, h)
 	});
 
 	this.window = new mxWindow(mxResources.get('layers'), div, x, y, w, h, true, true);
-	this.window.minimumSize = new mxRectangle(0, 0, 120, 120);
+	this.window.minimumSize = new mxRectangle(0, 0, 150, 120);
 	this.window.destroyOnClose = false;
 	this.window.setMaximizable(false);
 	this.window.setResizable(true);

@@ -246,6 +246,11 @@ App.MODE_NOTION = 'notion';
 App.MODE_EMBED = 'embed';
 
 /**
+ * Atlas App Mode
+ */
+App.MODE_ATLAS = 'atlas';
+
+/**
  * Sets the delay for autosave in milliseconds. Default is 2000.
  */
 App.DROPBOX_APPKEY = window.DRAWIO_DROPBOX_ID;
@@ -265,7 +270,6 @@ App.DROPINS_URL = 'https://www.dropbox.com/static/api/2/dropins.js';
  * But it doesn't work for IE11, so we fallback to the original one
  */
 App.ONEDRIVE_URL = mxClient.IS_IE11? 'https://js.live.net/v7.2/OneDrive.js' : window.DRAWIO_BASE_URL + '/js/onedrive/OneDrive.js';
-App.ONEDRIVE_INLINE_PICKER_URL = window.DRAWIO_BASE_URL + '/js/onedrive/mxODPicker.js';
 
 /**
  * Trello URL
@@ -275,7 +279,7 @@ App.TRELLO_URL = 'https://api.trello.com/1/client.js';
 /**
  * Trello JQuery dependency
  */
-App.TRELLO_JQUERY_URL = 'https://code.jquery.com/jquery-3.3.1.min.js';
+App.TRELLO_JQUERY_URL = window.DRAWIO_BASE_URL + '/js/jquery/jquery-3.3.1.min.js';
 
 /**
  * Specifies the key for the pusher project.
@@ -290,7 +294,7 @@ App.PUSHER_CLUSTER = 'eu';
 /**
  * Specifies the URL for the pusher API.
  */
-App.PUSHER_URL = 'https://js.pusher.com/4.3/pusher.min.js';
+App.PUSHER_URL = 'https://js.pusher.com/7.0.3/pusher.min.js';
 
 /**
  * Socket.io library 
@@ -364,7 +368,7 @@ App.loadScripts = function(scripts, onload)
 {
 	var n = scripts.length;
 	
-	for (var i = 0; i < n; i++)
+	for (var i = 0; i < scripts.length; i++)
 	{
 		mxscript(scripts[i], function()
 		{
@@ -517,17 +521,8 @@ App.getStoredMode = function()
 						if (App.mode == App.MODE_ONEDRIVE || (window.location.hash != null &&
 							window.location.hash.substring(0, 2) == '#W'))
 						{
-							if (urlParams['inlinePicker'] == '1' || mxClient.IS_ANDROID || mxClient.IS_IOS)
-							{
-								mxscript(App.ONEDRIVE_INLINE_PICKER_URL, function()
-								{
-									window.OneDrive = {}; //Needed to allow code that check its existance to work BUT it's not used 
-								});
-							}
-							else
-							{
-								mxscript(App.ONEDRIVE_URL);
-							}
+							//Editor.oneDriveInlinePicker can be set with configuration which is done later, so load it all time
+							mxscript(App.ONEDRIVE_URL);
 						}
 						else if (urlParams['chrome'] == '0')
 						{
@@ -649,7 +644,7 @@ App.main = function(callback, createUi)
 			{
 				var content = mxUtils.getTextContent(scripts[0]);
 				
-				if (CryptoJS.MD5(content).toString() != 'b02227617087e21bd49f2faa15164112')
+				if (CryptoJS.MD5(content).toString() != '0fed8c83fc7187e0b39310c4aa3e6d63')
 				{
 					console.log('Change bootstrap script MD5 in the previous line:', CryptoJS.MD5(content).toString());
 					alert('[Dev] Bootstrap script change requires update of CSP');
@@ -823,7 +818,7 @@ App.main = function(callback, createUi)
 		// Loading the correct bundle (one file) via the fallback system in mxResources. The stylesheet
 		// is compiled into JS in the build process and is only needed for local development.
 		mxUtils.getAll((urlParams['dev'] != '1') ? [bundle] : [bundle,
-			STYLE_PATH + '/default.xml', STYLE_PATH + '/dark-default.xml'], function(xhr)
+			STYLE_PATH + '/default.xml'], function(xhr)
 		{
 			// Adds bundle text to resources
 			mxResources.parse(xhr[0].getText());
@@ -913,10 +908,10 @@ App.main = function(callback, createUi)
 			}
 						
 			// Prepares themes with mapping from old default-style to old XML file
-			if (xhr.length > 2)
+			if (xhr.length > 1)
 			{
 				Graph.prototype.defaultThemes['default-style2'] = xhr[1].getDocumentElement();
-	 			Graph.prototype.defaultThemes['darkTheme'] = xhr[2].getDocumentElement();
+	 			Graph.prototype.defaultThemes['darkTheme'] = xhr[1].getDocumentElement();
 			}
 			
 			// Main
@@ -958,18 +953,8 @@ App.main = function(callback, createUi)
 						urlParams['od'] == '1')) && (navigator.userAgent == null ||
 						navigator.userAgent.indexOf('MSIE') < 0 || document.documentMode >= 10))))
 					{
-						if (urlParams['inlinePicker'] == '1' || mxClient.IS_ANDROID || mxClient.IS_IOS)
-						{
-							mxscript(App.ONEDRIVE_INLINE_PICKER_URL, function()
-							{
-								window.OneDrive = {}; //Needed to allow code that check its existance to work BUT it's not used 
-								window.DrawOneDriveClientCallback();
-							});
-						}
-						else
-						{
-							mxscript(App.ONEDRIVE_URL, window.DrawOneDriveClientCallback);
-						}
+						//Editor.oneDriveInlinePicker can be set with configuration which is done later, so load it all time
+						mxscript(App.ONEDRIVE_URL, window.DrawOneDriveClientCallback);
 					}
 					// Disables client
 					else if (typeof window.OneDrive === 'undefined')
@@ -1056,7 +1041,7 @@ App.main = function(callback, createUi)
 			if (mxSettings.settings != null)
 			{
 				document.body.style.backgroundColor = (uiTheme == 'dark' ||
-					mxSettings.settings.darkMode) ? '#2a2a2a' : '#ffffff';
+					mxSettings.settings.darkMode) ? Editor.darkColor : '#ffffff';
 				
 				if (mxSettings.settings.autosaveDelay != null)
 				{
@@ -1439,7 +1424,7 @@ App.prototype.init = function()
 		{
 			this.updateUserElement();
 			this.restoreLibraries();
-		}))
+		}));
 	}
 	
 	/**
@@ -1699,7 +1684,7 @@ App.prototype.init = function()
 				var file = this.getCurrentFile();
 				var mode = (file != null) ? file.getMode() : null;
 				
-				if (mode == App.MODE_DEVICE || mode == App.MODE_BROWSER)
+				if (urlParams['extAuth'] != '1' && (mode == App.MODE_DEVICE || mode == App.MODE_BROWSER))
 				{
 					this.showDownloadDesktopBanner();
 				}
@@ -1735,8 +1720,7 @@ App.prototype.init = function()
 					
 					var status = mxUtils.htmlEntities(mxResources.get('timeout'));
 					this.editor.setStatus('<div title="'+ status +
-						'" class="geStatusAlert" style="overflow:hidden;">' + status +
-						'</div>');
+						'" class="geStatusAlert">' + status + '</div>');
 				}
 				
 				EditorUi.logEvent({category: 'TIMEOUT-CACHE-CHECK', action: 'timeout', label: 408});
@@ -1768,7 +1752,7 @@ App.prototype.init = function()
 		this.menubar.container.appendChild(this.buttonContainer);
 	}
 
-	if (uiTheme == 'atlas' && this.menubar != null)
+	if ((uiTheme == 'atlas' || urlParams['atlas'] == '1') && this.menubar != null)
 	{
 		if (this.toggleElement != null)
 		{
@@ -1779,7 +1763,7 @@ App.prototype.init = function()
 		this.icon = document.createElement('img');
 		this.icon.setAttribute('src', IMAGE_PATH + '/logo-flat-small.png');
 		this.icon.setAttribute('title', mxResources.get('draw.io'));
-		this.icon.style.padding = '6px';
+		this.icon.style.padding = urlParams['atlas'] == '1'? '7px' : '6px';
 		this.icon.style.cursor = 'pointer';
 		
 		mxEvent.addListener(this.icon, 'click', mxUtils.bind(this, function(evt)
@@ -2364,25 +2348,20 @@ App.prototype.getThumbnail = function(width, fn)
 		if (this.pages != null && (darkTheme || this.currentPage != this.pages[0]))
 		{
 			var graphGetGlobalVariable = graph.getGlobalVariable;
-			graph = this.createTemporaryGraph((darkTheme) ? graph.getDefaultStylesheet() : graph.getStylesheet());
+			graph = this.createTemporaryGraph(graph.getStylesheet());
+			graph.setBackgroundImage = this.editor.graph.setBackgroundImage;
 			var page = this.pages[0];
 
-			if (page.viewState != null && page.viewState != null)
+			if (this.currentPage == page)
+			{
+				graph.setBackgroundImage(bgImg);
+			}
+			else if (page.viewState != null && page.viewState != null)
 			{
 				bgImg = page.viewState.backgroundImage;
-				graph.backgroundImage = bgImg;
-			}
-			else if (this.currentPage == this.pages[0])
-			{
-				graph.backgroundImage = bgImg;
+				graph.setBackgroundImage(bgImg);
 			}
 
-			// Avoids override of stylesheet in getSvg for dark mode
-			if (darkTheme)
-			{
-				graph.defaultThemeName = 'default';
-			}
-			
 			graph.getGlobalVariable = function(name)
 			{
 				if (name == 'page')
@@ -2439,6 +2418,7 @@ App.prototype.getThumbnail = function(width, fn)
 
 			if (bgImg != null)
 			{
+				bounds = mxRectangle.fromRectangle(bounds);
 				bounds.add(new mxRectangle(
 					(t.x + bgImg.x) * s, (t.y + bgImg.y) * s,
 					bgImg.width * s, bgImg.height * s));
@@ -3012,6 +2992,10 @@ App.prototype.showAlert = function(message)
 		div.style.zIndex = 2e9; 
 		div.style.left = '50%';
 		div.style.top = '-100%';
+		//Limit width to 80% max with word wrapping
+		div.style.maxWidth = '80%';
+		div.style.width = 'max-content';
+		div.style.whiteSpace = 'pre-wrap';
 		mxUtils.setPrefixedStyle(div.style, 'transform', 'translate(-50%,0%)');
 		mxUtils.setPrefixedStyle(div.style, 'transition', 'all 1s ease');
 		
@@ -3186,9 +3170,9 @@ App.prototype.start = function()
 					var doLoadFile = mxUtils.bind(this, function(xml)
 					{
 						// Extracts graph model from PNG
-						if (xml.substring(0, 22) == 'data:image/png;base64,')
+						if (Editor.isPngDataUrl(xml))
 						{
-							xml = this.extractGraphModelFromPng(xml);
+							xml = Editor.extractGraphModelFromPng(xml);
 						}
 						
 						var title = urlParams['title'];
@@ -3282,8 +3266,7 @@ App.prototype.start = function()
 						{
 							var id = this.getDiagramId();
 							
-							
-							if (EditorUi.enableDrafts && (urlParams['mode'] == null || EditorUi.isElectronApp) &&
+							if (EditorUi.enableDrafts && urlParams['mode'] == null &&
 								this.getServiceName() == 'draw.io' && (id == null || id.length == 0) &&
 								!this.editor.isChromelessView())
 							{
@@ -3389,7 +3372,7 @@ App.prototype.start = function()
 						}), null, null, null, null, urlParams['browser'] == '1',
 							null, null, true, rowLimit, null, null, null,
 							this.editor.fileExtensions);
-						this.showDialog(dlg.container, 400, (serviceCount > rowLimit) ? 390 : 270,
+						this.showDialog(dlg.container, 420, (serviceCount > rowLimit) ? 390 : 280,
 							true, false, mxUtils.bind(this, function(cancel)
 						{
 							if (cancel && this.getCurrentFile() == null)
@@ -3521,6 +3504,54 @@ App.prototype.loadDraft = function(xml, success)
 	}), null, null, true);
 };
 
+App.prototype.filterDrafts = function(filePath, guid, callback)
+{
+	var drafts = [];
+
+	function result()
+	{
+		callback(drafts);
+	};
+
+	try
+	{
+		this.getDatabaseItems(mxUtils.bind(this, function(items)
+		{
+			// Collects orphaned drafts
+			for (var i = 0; i < items.length; i++)
+			{
+				try
+				{
+					var key = items[i].key;
+					
+					if (key != null && key.substring(0, 7) == '.draft_')
+					{
+						var obj = JSON.parse(items[i].data);
+						
+						if (obj != null && obj.type == 'draft' && obj.aliveCheck != guid && 
+							((filePath == null && obj.fileObject == null) ||
+								(obj.fileObject != null && obj.fileObject.path == filePath)))	
+						{
+							obj.key = key;
+							drafts.push(obj);
+						}
+					}
+				}
+				catch (e)
+				{
+					// ignore
+				}
+			}
+
+			result();
+		}, result));
+	}
+	catch (e)
+	{
+		result();
+	}
+};
+
 /**
  * Checks for orphaned drafts.
  */
@@ -3536,34 +3567,8 @@ App.prototype.checkDrafts = function()
 		{
 			localStorage.removeItem('.draft-alive-check');
 
-			this.getDatabaseItems(mxUtils.bind(this, function(items)
+			this.filterDrafts(null, guid, mxUtils.bind(this, function(drafts)
 			{
-				// Collects orphaned drafts
-				var drafts = [];
-				
-				for (var i = 0; i < items.length; i++)
-				{
-					try
-					{
-						var key = items[i].key;
-						
-						if (key != null && key.substring(0, 7) == '.draft_')
-						{
-							var obj = JSON.parse(items[i].data);
-							
-							if (obj != null && obj.type == 'draft' && obj.aliveCheck != guid)
-							{
-								obj.key = key;
-								drafts.push(obj);
-							}
-						}
-					}
-					catch (e)
-					{
-						// ignore
-					}
-				}
-				
 				if (drafts.length == 1)
 				{
 					this.loadDraft(drafts[0].data, mxUtils.bind(this, function()
@@ -3615,16 +3620,6 @@ App.prototype.checkDrafts = function()
 					dlg.init();
 				}
 				else if (urlParams['splash'] != '0')
-				{
-					this.loadFile();
-				}
-				else
-				{
-					this.createFile(this.defaultFilename, this.getFileData(), null, null, null, null, null, true);
-				}
-			}), mxUtils.bind(this, function()
-			{
-				if (urlParams['splash'] != '0')
 				{
 					this.loadFile();
 				}
@@ -4566,7 +4561,7 @@ App.prototype.saveFile = function(forceDialog, success)
 				this.hideDialog();
 			}), mxResources.get('saveAs'), mxResources.get('download'), null, null, allowTab,
 				null, true, rowLimit, null, null, null, this.editor.fileExtensions, false);
-			this.showDialog(dlg.container, 400, (serviceCount > rowLimit) ? 390 : 270, true, true);
+			this.showDialog(dlg.container, 420, (serviceCount > rowLimit) ? 390 : 280, true, true);
 			dlg.init();
 		}
 	}
@@ -4625,7 +4620,7 @@ App.prototype.loadTemplate = function(url, onload, onerror, templateFilename, as
 			else if (!this.isOffline() && new XMLHttpRequest().upload && this.isRemoteFileFormat(data, filterFn))
 			{
 				// Asynchronous parsing via server
-				this.parseFile(new Blob([data], {type: 'application/octet-stream'}), mxUtils.bind(this, function(xhr)
+				this.parseFileData(data, mxUtils.bind(this, function(xhr)
 				{
 					if (xhr.readyState == 4 && xhr.status >= 200 && xhr.status <= 299 &&
 						xhr.responseText.substring(0, 13) == '<mxGraphModel')
@@ -4646,9 +4641,9 @@ App.prototype.loadTemplate = function(url, onload, onerror, templateFilename, as
 			}
 			else
 			{
-				if (/(\.png)($|\?)/i.test(filterFn) || this.isPngData(data))
+				if (/(\.png)($|\?)/i.test(filterFn) || Editor.isPngData(data))
 				{
-					data = this.extractGraphModelFromPng(responseData);
+					data = Editor.extractGraphModelFromPng(responseData);
 				}
 				
 				onload(data);
@@ -4999,7 +4994,11 @@ App.prototype.fileCreated = function(file, libs, replace, done, clibs)
 			}), mxUtils.bind(this, function(resp)
 			{
 				complete();
-				this.handleError(resp);
+
+				if (resp == null || resp.name != 'AbortError')
+				{
+					this.handleError(resp);
+				}
 			}));
 		}
 	}
@@ -5347,7 +5346,8 @@ App.prototype.loadFile = function(id, sameWindow, file, success, force)
 							// Shows a warning if a copy was opened which happens
 							// eg. for .png files in IE as they cannot be written
 							var status = mxResources.get('copyCreated');
-							this.editor.setStatus('<div title="'+ status + '" class="geStatusAlert" style="overflow:hidden;">' + status + '</div>');
+							this.editor.setStatus('<div title="'+ status +
+								'" class="geStatusAlert">' + status + '</div>');
 						}
 						
 						if (success != null)
@@ -5361,8 +5361,8 @@ App.prototype.loadFile = function(id, sameWindow, file, success, force)
 						{
 							console.log('error in loadFile:', id, resp);
 						}
-						
-						this.handleError(resp, (resp != null) ? mxResources.get('errorLoadingFile') : null, mxUtils.bind(this, function()
+
+						var fn = mxUtils.bind(this, function()
 						{
 							var currentFile = this.getCurrentFile();
 							
@@ -5375,7 +5375,17 @@ App.prototype.loadFile = function(id, sameWindow, file, success, force)
 							{
 								window.location.hash = '#' + currentFile.getHash();
 							}
-						}), null, null, '#' + peerChar + id);
+						});
+
+						if (resp == null || resp.name != 'AbortError')
+						{
+							this.handleError(resp, (resp != null) ? mxResources.get('errorLoadingFile') : null,
+								fn, null, null, '#' + peerChar + id);
+						}
+						else
+						{
+							fn();
+						}
 					}));
 				}
 			}
@@ -5748,6 +5758,21 @@ App.prototype.updateButtonContainer = function()
 	{
 		var file = this.getCurrentFile();
 		
+		if (urlParams['embed'] == '1')
+		{
+			if (uiTheme == 'atlas' || urlParams['atlas'] == '1')
+			{
+				this.buttonContainer.style.paddingRight = '12px';
+				this.buttonContainer.style.paddingTop = '6px';
+				this.buttonContainer.style.right = urlParams['noLangIcon'] == '1'? '0' : '25px';
+			}
+			else if (uiTheme != 'min')
+			{
+				this.buttonContainer.style.paddingRight = '38px';
+				this.buttonContainer.style.paddingTop = '6px';
+			}
+		}
+		
 		// Comments
 		if (this.commentsSupported() && urlParams['sketch'] != '1')
 		{
@@ -5769,6 +5794,10 @@ App.prototype.updateButtonContainer = function()
 				else if (uiTheme == 'min')
 				{
 					this.commentButton.style.marginTop = '1px';
+				}
+				else if (urlParams['atlas'] == '1')
+				{
+					this.commentButton.style.marginTop = '-2px';
 				}
 				else
 				{
@@ -5847,7 +5876,10 @@ App.prototype.updateButtonContainer = function()
 			}
 			
 			//Fetch notifications
-			this.fetchAndShowNotification(this.mode == 'device' || this.mode == 'google'? this.mode : null);
+			if (urlParams['extAuth'] != '1') //Disable notification with external auth (e.g, Teams app)
+			{
+				this.fetchAndShowNotification('online', this.mode);
+			}
 		}
 		else if (urlParams['notif'] != null) //Notif for embed mode
 		{
@@ -5857,7 +5889,7 @@ App.prototype.updateButtonContainer = function()
 };
 
 
-App.prototype.fetchAndShowNotification = function(target)
+App.prototype.fetchAndShowNotification = function(target, subtarget)
 {
 	if (this.fetchingNotif)
 	{
@@ -5872,11 +5904,12 @@ App.prototype.fetchAndShowNotification = function(target)
 	{
 		notifs = notifs.filter(function(notif)
 		{
-			return !notif.targets || notif.targets.indexOf(target) > -1;
+			return !notif.targets || notif.targets.indexOf(target) > -1 || 
+						(subtarget != null && notif.targets.indexOf(subtarget) > -1);
 		});
 		
 		var lsReadFlag = target + 'NotifReadTS';
-		var lastRead = parseInt(localStorage.getItem(lsReadFlag));
+		var lastRead = (localStorage != null) ? parseInt(localStorage.getItem(lsReadFlag)) : true;
 				
 		for (var i = 0; i < notifs.length; i++)
 		{
@@ -5888,7 +5921,10 @@ App.prototype.fetchAndShowNotification = function(target)
 	
 	try
 	{
-		cachedNotif = JSON.parse(localStorage.getItem(cachedNotifKey));
+		if (localStorage != null)
+		{
+			cachedNotif = JSON.parse(localStorage.getItem(cachedNotifKey));
+		}
 	}
 	catch(e) {} //Ignore
 	
@@ -5908,7 +5944,11 @@ App.prototype.fetchAndShowNotification = function(target)
 					return b.timestamp - a.timestamp;
 				});
 
-				localStorage.setItem(cachedNotifKey, JSON.stringify({ts: Date.now(), notifs: notifs}));
+				if (isLocalStorage)
+				{
+					localStorage.setItem(cachedNotifKey, JSON.stringify({ts: Date.now(), notifs: notifs}));
+				}
+				
 				this.fetchingNotif = false;	
 				processNotif(notifs);
 			}
@@ -5922,13 +5962,38 @@ App.prototype.fetchAndShowNotification = function(target)
 
 App.prototype.showNotification = function(notifs, lsReadFlag)
 {
+	var newCount = notifs.length;
+
+	if (uiTheme == 'min')
+	{
+		newCount = 0;
+
+		for (var i = 0; i < notifs.length; i++)
+		{
+			if (notifs[i].isNew)
+			{
+				newCount++;
+			}
+		}
+	}
+
+	if (newCount == 0)
+	{
+		if (this.notificationBtn != null)
+		{
+			this.notificationBtn.style.display = 'none';
+			this.editor.fireEvent(new mxEventObject('statusChanged'));
+		}
+		
+		return;
+	}
+	
 	function shouldAnimate(newNotif)
 	{
 		var countEl = document.querySelector('.geNotification-count');
 		
 		if (countEl == null)
 		{
-			EditorUi.logError('Error: element (.geNotification-count) is null in showNotification in shouldAnimate', null, 5769);
 			return;
 		}
 		
@@ -5950,7 +6015,7 @@ App.prototype.showNotification = function(notifs, lsReadFlag)
 			unread[i].className = 'circle';
 		}
 		
-		if (notifs[0])
+		if (isLocalStorage && notifs[0])
 		{
 			localStorage.setItem(lsReadFlag, notifs[0].timestamp);
 		}
@@ -5965,6 +6030,10 @@ App.prototype.showNotification = function(notifs, lsReadFlag)
 		{
 			this.notificationBtn.style.width = '30px';
 			this.notificationBtn.style.top = '4px';
+		}
+		else if (urlParams['atlas'] == '1')
+		{
+			this.notificationBtn.style.top = '2px';
 		}
 		
 		var notifCount = document.createElement('span');
@@ -6035,18 +6104,17 @@ App.prototype.showNotification = function(notifs, lsReadFlag)
 		
 		mxEvent.addListener(winClose, 'click', markAllAsRead);
 	}
+	else
+	{
+		this.notificationBtn.style.display = ''; //In case it was hidden
+	}
 		
 	var newNotif = 0;
 	var notifListEl = document.getElementById('geNotifList');
 	
 	if (notifListEl == null)
 	{
-		EditorUi.logError('Error: element (geNotifList) is null in showNotification', null, 5859);
-	}
-	else if (notifs.length == 0)
-	{
-		notifListEl.innerHTML = '<div class="line"></div><div class="notification">' +
-								mxUtils.htmlEntities(mxResources.get('none')) + '</div>';
+		return; //This shouldn't happen and no meaning of continuing
 	}
 	else
 	{
@@ -6129,7 +6197,7 @@ App.prototype.save = function(name, done)
 				}));
 			}
 			
-			file.handleFileError(err, true);
+			file.handleFileError(err, err == null || err.name != 'AbortError');
 		});
 		
 		try
@@ -6261,7 +6329,7 @@ App.prototype.exportFile = function(data, filename, mimeType, base64Encoded, mod
 			{
 				// TODO: Add callback with url param for clickable status message
 				// "File exported. Click here to open folder."
-//				this.editor.setStatus('<div class="geStatusMessage" style="cursor:pointer;">' +
+//				this.editor.setStatus('<div class="geStatusMessage">' +
 //					mxResources.get('saved') + '</div>');
 //				
 //				// Installs click handler for opening
@@ -6271,6 +6339,8 @@ App.prototype.exportFile = function(data, filename, mimeType, base64Encoded, mod
 //					
 //					if (links.length > 0)
 //					{
+//						links[0].style.cursor = 'pointer';
+//
 //						mxEvent.addListener(links[0], 'click', mxUtils.bind(this, function()
 //						{
 //							if (resp != null && resp.id != null)
@@ -6311,6 +6381,21 @@ App.prototype.exportFile = function(data, filename, mimeType, base64Encoded, mod
 		{
 			// Must insert file as library to force the file to be written
 			this.gitHub.insertFile(filename, data, mxUtils.bind(this, function()
+			{
+				this.spinner.stop();
+			}), mxUtils.bind(this, function(resp)
+			{
+				this.spinner.stop();
+				this.handleError(resp);
+			}), true, folderId, base64Encoded);
+		}
+	}
+	else if (mode == App.MODE_GITLAB)
+	{
+		if (this.gitHub != null && this.spinner.spin(document.body, mxResources.get('saving')))
+		{
+			// Must insert file as library to force the file to be written
+			this.gitLab.insertFile(filename, data, mxUtils.bind(this, function()
 			{
 				this.spinner.stop();
 			}), mxUtils.bind(this, function(resp)
@@ -6555,7 +6640,7 @@ App.prototype.convertFile = function(url, filename, mimeType, extension, success
 				}
 				else if (Graph.fileSupport && new XMLHttpRequest().upload && this.isRemoteFileFormat(data, url))
 				{
-					this.parseFile(new Blob([data], {type: 'application/octet-stream'}), mxUtils.bind(this, function(xhr)
+					this.parseFileData(data, mxUtils.bind(this, function(xhr)
 					{
 						if (xhr.readyState == 4)
 						{
@@ -6835,6 +6920,9 @@ App.prototype.updateHeader = function()
 		
 		mxEvent.addListener(this.toggleFormatElement, 'click', mxUtils.bind(this, function(evt)
 		{
+			EditorUi.logEvent({category: 'TOOLBAR-ACTION-',
+				action: 'formatPanel'});
+		
 			this.actions.get('formatPanel').funct();
 			mxEvent.consume(evt);
 		}));
@@ -6894,6 +6982,9 @@ App.prototype.updateHeader = function()
 		mxEvent.addListener(this.fullscreenElement, 'click', mxUtils.bind(this, function(evt)
 		{
 			var visible = this.fullscreenMode;
+
+			EditorUi.logEvent({category: 'TOOLBAR-ACTION-',
+				action: 'fullscreen' , currentstate: visible});
 			
 			if (uiTheme != 'atlas' && urlParams['embed'] != '1')
 			{
@@ -6949,6 +7040,8 @@ App.prototype.updateHeader = function()
 			// Toggles compact mode
 			mxEvent.addListener(this.toggleElement, 'click', mxUtils.bind(this, function(evt)
 			{
+				EditorUi.logEvent({category: 'TOOLBAR-ACTION-',
+					action: 'toggleUI'});
 				this.toggleCompactMode();
 				mxEvent.consume(evt);
 			}));
@@ -7058,7 +7151,7 @@ App.prototype.updateUserElement = function()
 	    	{
 				evt.preventDefault();
 			}));
-			
+
 			mxEvent.addListener(this.userElement, 'click', mxUtils.bind(this, function(evt)
 			{
 				if (this.userPanel == null)
@@ -7066,10 +7159,13 @@ App.prototype.updateUserElement = function()
 					var div = document.createElement('div');
 					div.className = 'geDialog';
 					div.style.position = 'absolute';
-					div.style.top = (this.userElement.clientTop + this.userElement.clientHeight + 6) + 'px';
+					div.style.top = (this.userElement.clientTop +
+						this.userElement.clientHeight + 6) + 'px';
+					div.style.zIndex = 5;
 					div.style.right = '36px';
 					div.style.padding = '0px';
 					div.style.cursor = 'default';
+					div.style.minWidth = '300px';
 					
 					this.userPanel = div;
 				}
@@ -7136,22 +7232,58 @@ App.prototype.updateUserElement = function()
 							var createUserRow = mxUtils.bind(this, function (user)
 							{
 								var tr = document.createElement('tr');
-								tr.style.cssText = user.isCurrent? '' : 'background-color: whitesmoke; cursor: pointer';
 								tr.setAttribute('title', 'User ID: ' + user.id);
-								tr.innerHTML = '<td valign="middle" style="height: 59px;width: 66px;' + 
-									(user.isCurrent? '' : 'border-top: 1px solid rgb(224, 224, 224);') + '">' +
-									'<img width="50" height="50" style="margin: 4px 8px 0 8px;border-radius:50%;" src="' + 
-									((user.pictureUrl != null) ? user.pictureUrl : this.defaultUserPicture) + '"/>' +
-									'</td><td valign="middle" style="white-space:nowrap;' +
-									((user.pictureUrl != null) ? 'padding-top:4px;' : '') +
-									(user.isCurrent? '' : 'border-top: 1px solid rgb(224, 224, 224);') +
-									'">' + mxUtils.htmlEntities(user.displayName) + '<br>' +
-									'<small style="color:gray;">' + mxUtils.htmlEntities(user.email) +
-									'</small><div style="margin-top:4px;"><i>' +
-									mxResources.get('googleDrive') + '</i></div>';
-								
+
+								var td = document.createElement('td');
+								td.setAttribute('valig', 'middle');
+								td.style.height = '59px';
+								td.style.width = '66px';
+
+								var img = document.createElement('img');
+								img.setAttribute('width', '50');
+								img.setAttribute('height', '50');
+								img.setAttribute('border', '0');
+								img.setAttribute('src', (user.pictureUrl != null) ? user.pictureUrl : this.defaultUserPicture);
+								img.style.borderRadius = '50%';
+								img.style.margin = '4px 8px 0 8px';
+								td.appendChild(img);
+								tr.appendChild(td);
+	
+								var td = document.createElement('td');
+								td.setAttribute('valign', 'middle');
+								td.style.whiteSpace = 'nowrap';
+								td.style.paddingTop = '4px';
+								td.style.maxWidth = '0';
+								td.style.overflow = 'hidden';
+								td.style.textOverflow = 'ellipsis';
+								mxUtils.write(td, user.displayName +
+									((user.isCurrent && driveUsers.length > 1) ?
+									' (' + mxResources.get('default') + ')' : ''));
+	
+								if (user.email != null)
+								{
+									mxUtils.br(td);
+	
+									var small = document.createElement('small');
+									small.style.color = 'gray';
+									mxUtils.write(small, user.email);
+									td.appendChild(small);
+								}
+	
+								var div = document.createElement('div');
+								div.style.marginTop = '4px';
+
+								var i = document.createElement('i');
+								mxUtils.write(i, mxResources.get('googleDrive'));
+								div.appendChild(i);
+								td.appendChild(div);
+								tr.appendChild(td);
+
 								if (!user.isCurrent)
 								{
+									tr.style.cursor = 'pointer';
+									tr.style.opacity = '0.3';
+
 									mxEvent.addListener(tr, 'click', mxUtils.bind(this, function(evt)
 									{
 										closeFile(mxUtils.bind(this, function()
@@ -7180,7 +7312,10 @@ App.prototype.updateUserElement = function()
 							connected = true;
 							
 							var driveUserTable = document.createElement('table');
-							driveUserTable.style.cssText ='font-size:10pt;padding: 20px 0 0 0;min-width: 300px;border-spacing: 0;';
+							driveUserTable.style.borderSpacing = '0';
+							driveUserTable.style.fontSize = '10pt';
+							driveUserTable.style.width = '100%';
+							driveUserTable.style.padding = '10px';
 
 							for (var i = 0; i < driveUsers.length; i++)
 							{
@@ -7191,7 +7326,7 @@ App.prototype.updateUserElement = function()
 							
 							var div = document.createElement('div');
 							div.style.textAlign = 'left';
-							div.style.padding = '8px';
+							div.style.padding = '10px';
 							div.style.whiteSpace = 'nowrap';
 							div.style.borderTop = '1px solid rgb(224, 224, 224)';
 
@@ -7253,19 +7388,69 @@ App.prototype.updateUserElement = function()
 							
 							connected = true;
 							var userTable = document.createElement('table');
-							userTable.style.cssText = 'font-size:10pt;padding:' + (connected? '10' : '20') + 'px 20px 10px 10px;';
-							
-							userTable.innerHTML += '<tr><td valign="top">' +
-								((logo != null) ? '<img style="margin-right:6px;" src="' + logo + '" width="40" height="40"/></td>' : '') +
-								'<td valign="middle" style="white-space:nowrap;">' + mxUtils.htmlEntities(user.displayName) +
-								((user.email != null) ? '<br><small style="color:gray;">' + mxUtils.htmlEntities(user.email) + '</small>' : '') +
-								((label != null) ? '<div style="margin-top:4px;"><i>' + mxUtils.htmlEntities(label) + '</i></div>' : '') +
-								'</td></tr>';
-							
+							userTable.style.borderSpacing = '0';
+							userTable.style.fontSize = '10pt';
+							userTable.style.width = '100%';
+							userTable.style.padding = '10px';
+
+							var tbody = document.createElement('tbody');
+							var row = document.createElement('tr');
+							var td = document.createElement('td');
+							td.setAttribute('valig', 'top');
+							td.style.width = '40px';
+
+							if (logo != null)
+							{
+								var img = document.createElement('img');
+								img.setAttribute('width', '40');
+								img.setAttribute('height', '40');
+								img.setAttribute('border', '0');
+								img.setAttribute('src', logo);
+								img.style.marginRight = '6px';
+
+								td.appendChild(img);
+							}
+
+							row.appendChild(td);
+
+							var td = document.createElement('td');
+							td.setAttribute('valign', 'middle');
+							td.style.whiteSpace = 'nowrap';
+							td.style.maxWidth = '0';
+							td.style.overflow = 'hidden';
+							td.style.textOverflow = 'ellipsis';
+
+							mxUtils.write(td, user.displayName);
+
+							if (user.email != null)
+							{
+								mxUtils.br(td);
+
+								var small = document.createElement('small');
+								small.style.color = 'gray';
+								mxUtils.write(small, user.email);
+								td.appendChild(small);
+							}
+
+							if (label != null)
+							{
+								var div = document.createElement('div');
+								div.style.marginTop = '4px';
+
+								var i = document.createElement('i');
+								mxUtils.write(i, label);
+								div.appendChild(i);
+								td.appendChild(div);
+							}
+
+							row.appendChild(td);
+							tbody.appendChild(row);
+							userTable.appendChild(tbody);
+
 							this.userPanel.appendChild(userTable);
 							var div = document.createElement('div');
 							div.style.textAlign = 'center';
-							div.style.paddingBottom = '12px';
+							div.style.padding = '10px';
 							div.style.whiteSpace = 'nowrap';
 							
 							if (logout != null)
@@ -7470,7 +7655,7 @@ App.prototype.updateUserElement = function()
 					{
 						var div = document.createElement('div');
 						div.style.textAlign = 'center';
-						div.style.padding = '20px 20px 10px 10px';
+						div.style.padding = '10px';
 						div.innerHTML = mxResources.get('notConnected');
 						
 						this.userPanel.appendChild(div);
@@ -7478,7 +7663,7 @@ App.prototype.updateUserElement = function()
 					
 					var div = document.createElement('div');
 					div.style.textAlign = 'center';
-					div.style.padding = '12px';
+					div.style.padding = '10px';
 					div.style.background = Editor.isDarkMode() ? '' : 'whiteSmoke';
 					div.style.borderTop = '1px solid #e0e0e0';
 					div.style.whiteSpace = 'nowrap';

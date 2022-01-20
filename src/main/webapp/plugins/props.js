@@ -4,7 +4,7 @@
 Draw.loadPlugin(function(ui) {
 	
 	var div = document.createElement('div');
-	div.style.background = Editor.isDarkMode() ? '#2a2a2a' : '#ffffff';
+	div.style.background = Editor.isDarkMode() ? Editor.darkColor : '#ffffff';
 	div.style.border = '1px solid gray';
 	div.style.opacity = '0.8';
 	div.style.padding = '10px';
@@ -164,12 +164,12 @@ Draw.loadPlugin(function(ui) {
 
 	if (!ui.editor.isChromelessView())
 	{
-		graph.selectionModel.addListener(mxEvent.EVENT_CHANGE, function(sender, evt)
+		graph.selectionModel.addListener(mxEvent.CHANGE, function(sender, evt)
 		{
 			cellClicked(graph.getSelectionCell());
 		});
 		
-		graph.model.addListener(mxEvent.EVENT_CHANGE, function(sender, evt)
+		graph.model.addListener(mxEvent.CHANGE, function(sender, evt)
 		{
 			cellClicked(graph.getSelectionCell());
 		});

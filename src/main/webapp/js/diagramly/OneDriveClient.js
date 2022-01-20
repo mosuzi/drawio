@@ -16,12 +16,9 @@ window.OneDriveClient = function(editorUi, isExtAuth, inlinePicker, noLogout)
 		isExtAuth = true;
 	}
 	
-	if (inlinePicker == null && 
-		((window.urlParams != null && window.urlParams['inlinePicker'] == '1') ||
-		mxClient.IS_ANDROID || mxClient.IS_IOS //Mobile devices doesn't work with OneDrive picker, so, use the inline picker
-		))
+	if (inlinePicker == null) //Use inline picker as default
 	{
-		inlinePicker = true;
+		inlinePicker = window.Editor != null? Editor.oneDriveInlinePicker : true;
 	}
 	
 	if (noLogout == null && window.urlParams != null && window.urlParams['noLogoutOD'] == '1')
@@ -50,8 +47,10 @@ mxUtils.extend(OneDriveClient, DrawioClient);
  * LATER: If thumbnails are disabled, make sure to replace the
  * existing thumbnail with the placeholder only once.
  */
-OneDriveClient.prototype.clientId = window.DRAWIO_MSGRAPH_CLIENT_ID || ((window.location.hostname == 'test.draw.io') ?
-	'2e598409-107f-4b59-89ca-d7723c8e00a4' : '45c10911-200f-4e27-a666-9e9fca147395');
+OneDriveClient.prototype.clientId = window.DRAWIO_MSGRAPH_CLIENT_ID;
+
+OneDriveClient.prototype.clientId = window.location.hostname == 'test.draw.io' ?
+		'2e598409-107f-4b59-89ca-d7723c8e00a4' : OneDriveClient.prototype.clientId;
 
 OneDriveClient.prototype.clientId = window.location.hostname == 'app.diagrams.net' ?
 		'b5ff67d6-3155-4fca-965a-59a3655c4476' : OneDriveClient.prototype.clientId;
@@ -174,7 +173,7 @@ OneDriveClient.prototype.updateUser = function(success, error, failOnAuth)
 			else
 			{
 				var data = JSON.parse(req.getText());
-				this.setUser(new DrawioUser(data.id, null, data.displayName));
+				this.setUser(new DrawioUser(data.id, data.mail, data.displayName));
 				success();
 			}
 		}
@@ -649,7 +648,7 @@ OneDriveClient.prototype.getFile = function(id, success, error, denyConvert, asL
 							
 							if (Graph.fileSupport && new XMLHttpRequest().upload && this.ui.isRemoteFileFormat(data, meta['@microsoft.graph.downloadUrl']))
 							{
-								this.ui.parseFile(new Blob([data], {type: 'application/octet-stream'}), mxUtils.bind(this, function(xhr)
+								this.ui.parseFileData(data, mxUtils.bind(this, function(xhr)
 								{
 									try
 									{
@@ -722,7 +721,15 @@ OneDriveClient.prototype.getFile = function(id, success, error, denyConvert, asL
 		}
 		else
 		{
-			error(this.parseRequestText(req));
+			if (this.isExtAuth)
+			{
+				error({message: mxResources.get('fileNotFoundOrDenied'),
+						ownerEmail: window.urlParams != null? urlParams['ownerEml'] : null});
+			}
+			else
+			{
+				error(this.parseRequestText(req));				
+			}
 		}
 	}), error);
 };
@@ -1257,6 +1264,13 @@ OneDriveClient.prototype.parseRequestText = function(req)
 	try
 	{
 		result = JSON.parse(req.getText());
+		result.status = req.getStatus();
+		
+		if (result.error)
+		{
+			result.error.status = result.status;
+			result.error.code = result.status;
+		}
 	}
 	catch (e)
 	{
@@ -1284,8 +1298,6 @@ OneDriveClient.prototype.createInlinePicker = function(fn, foldersOnly)
 	{
 		var odPicker = null;
 		var div = document.createElement('div');
-		div.style.width = '550px';
-		div.style.height = '435px';
 		div.style.position = 'relative';
 		
 		var dlg = new CustomDialog(this.ui, div, mxUtils.bind(this, function()
@@ -1312,6 +1324,9 @@ OneDriveClient.prototype.createInlinePicker = function(fn, foldersOnly)
 		}), null, mxResources.get(foldersOnly? 'save' :'open'), null, null, null, null, true);
 		
 		this.ui.showDialog(dlg.container, 550, 500, true, true);
+		//Set width/height of the picker container
+		div.style.width = dlg.container.parentNode.style.width;
+		div.style.height = (parseInt(dlg.container.parentNode.style.height) - 60) + 'px';
 		
 		odPicker = new mxODPicker(div, null, mxUtils.bind(this, function(url, success, error)
 		{
@@ -1484,11 +1499,19 @@ OneDriveClient.prototype.pickFile = function(fn)
 	{
 		this.authenticate(mxUtils.bind(this, function()
 		{
-			this.ui.showDialog(new BtnDialog(this.ui, this, mxResources.get('open'), mxUtils.bind(this, function()
+			if (this.inlinePicker)
 			{
 				this.ui.hideDialog();
-				odOpenDlg();							
-			})).container, 300, 140, true, true);
+				odOpenDlg();
+			}
+			else
+			{
+				this.ui.showDialog(new BtnDialog(this.ui, this, mxResources.get('open'), mxUtils.bind(this, function()
+				{
+					this.ui.hideDialog();
+					odOpenDlg();							
+				})).container, 300, 140, true, true);
+			}
 		}), errorFn);
 	}
 	else

@@ -210,7 +210,7 @@ if (urlParams['sidebar-entries'] != 'large')
 /**
  * Specifies the size of the sidebar titles.
  */
-Sidebar.prototype.sidebarTitleSize = 9;
+Sidebar.prototype.sidebarTitleSize = 8;
 
 /**
  * Specifies if titles in the sidebar should be enabled.
@@ -255,6 +255,18 @@ Sidebar.prototype.defaultImageHeight = 80;
 Sidebar.prototype.tooltipMouseDown = null;
 
 /**
+ * Reloads the sidebar.
+ */
+Sidebar.prototype.refresh = function()
+{
+	var graph = this.editorUi.editor.graph;
+	this.graph.stylesheet.styles = mxUtils.clone(graph.stylesheet.styles);
+	this.container.innerHTML = '';
+	this.palettes = new Object();
+	this.init();
+};
+
+/**
  * Adds all palettes to the sidebar.
  */
 Sidebar.prototype.getTooltipOffset = function(elt, bounds)
@@ -273,8 +285,9 @@ Sidebar.prototype.getTooltipOffset = function(elt, bounds)
 /**
  * Adds all palettes to the sidebar.
  */
-Sidebar.prototype.createTooltip = function(elt, cells, w, h, title, showLabel, off, maxSize, mouseDown, closable)
+Sidebar.prototype.createTooltip = function(elt, cells, w, h, title, showLabel, off, maxSize, mouseDown, closable, applyAllStyles)
 {
+	applyAllStyles = (applyAllStyles != null) ? applyAllStyles : true;
 	this.tooltipMouseDown = mouseDown;
 	
 	// Lazy creation of the DOM nodes and graph instance
@@ -352,7 +365,7 @@ Sidebar.prototype.createTooltip = function(elt, cells, w, h, title, showLabel, o
 	this.tooltipCloseImage.style.display = (closable) ? '' : 'none';
 	this.graph2.model.clear();
 	this.graph2.view.setTranslate(this.tooltipBorder, this.tooltipBorder);
-
+	
 	if (!maxSize && (w > this.maxTooltipWidth || h > this.maxTooltipHeight))
 	{
 		this.graph2.view.scale = Math.round(Math.min(this.maxTooltipWidth / w, this.maxTooltipHeight / h) * 100) / 100;
@@ -369,11 +382,13 @@ Sidebar.prototype.createTooltip = function(elt, cells, w, h, title, showLabel, o
 	
 	// Applies current style for preview
 	var temp = this.graph2.cloneCells(cells);
-	this.editorUi.insertHandler(temp, null, this.graph2.model);
+	this.editorUi.insertHandler(temp, null, this.graph2.model,
+		(!applyAllStyles) ? this.editorUi.editor.graph.defaultVertexStyle : null,
+		(!applyAllStyles) ? this.editorUi.editor.graph.defaultEdgeStyle : null,
+		applyAllStyles, true);
 	this.graph2.addCells(temp);
-	
+
 	mxClient.NO_FO = fo;
-	
 	var bounds = this.graph2.getGraphBounds();
 	
 	// Maximum size applied with transform for faster repaint
@@ -1145,8 +1160,14 @@ Sidebar.prototype.addGeneralPalette = function(expand)
 	this.setCurrentSearchEntryLibrary('general', 'general');
 	var sb = this;
 
+	var temp = parseInt(this.editorUi.editor.graph.defaultVertexStyle['fontSize']);
+	var fontSize = !isNaN(temp) ? 'fontSize=' + Math.min(16, temp) + ';' : '';
+
 	// Reusable cells
-	var field = new mxCell('List Item', new mxGeometry(0, 0, 60, 26), 'text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;');
+	var field = new mxCell('List Item', new mxGeometry(0, 0, 80, 30),
+		'text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;' +
+		'spacingLeft=4;spacingRight=4;overflow=hidden;points=[[0,0.5],[1,0.5]];' +
+		'portConstraint=eastwest;rotatable=0;' + fontSize);
 	field.vertex = true;
 
 	var fns = [
@@ -1154,7 +1175,7 @@ Sidebar.prototype.addGeneralPalette = function(expand)
 	 	this.createVertexTemplateEntry('rounded=1;whiteSpace=wrap;html=1;', 120, 60, '', 'Rounded Rectangle', null, null, 'rounded rect rectangle box'),
 	 	// Explicit strokecolor/fillcolor=none is a workaround to maintain transparent background regardless of current style
 	 	this.createVertexTemplateEntry('text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;',
- 			40, 20, 'Text', 'Text', null, null, 'text textbox textarea label'),
+ 			60, 30, 'Text', 'Text', null, null, 'text textbox textarea label'),
 	 	this.createVertexTemplateEntry('text;html=1;strokeColor=none;fillColor=none;spacing=5;spacingTop=-20;whiteSpace=wrap;overflow=hidden;rounded=0;', 190, 120,
 			'<h1>Heading</h1><p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>',
 			'Textbox', null, null, 'text textbox textarea'),
@@ -1186,8 +1207,8 @@ Sidebar.prototype.addGeneralPalette = function(expand)
 		this.createVertexTemplateEntry('swimlane;horizontal=0;', 200, 200, 'Horizontal Container', 'Horizontal Container', null, null, 'container swimlane lane pool group'),
 		this.addEntry('list group erd table', function()
 		{
-			var cell = new mxCell('List', new mxGeometry(0, 0, 140, 110),
-		    	'swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;' +
+			var cell = new mxCell('List', new mxGeometry(0, 0, 140, 120),
+		    	'swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;' +
 		    	'resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;');
 			cell.vertex = true;
 			cell.insert(sb.cloneCell(field, 'Item 1'));
@@ -1322,11 +1343,11 @@ Sidebar.prototype.addMiscPalette = function(expand)
  			'<ul><li>Value 1</li><li>Value 2</li><li>Value 3</li></ul>', 'Unordered List'),
 	 	this.createVertexTemplateEntry('text;strokeColor=none;fillColor=none;html=1;whiteSpace=wrap;verticalAlign=middle;overflow=hidden;', 100, 80,
  			'<ol><li>Value 1</li><li>Value 2</li><li>Value 3</li></ol>', 'Ordered List'),
- 		this.addDataEntry('table', 180, 120, 'Table 1', '7ZjBTuMwEIafJtdVnFDoXhtYLnBZeAHTTGtLjieyB9Lu0zNO3FYVVM0upMASKZU8Y49jf3+tX06SF9Xq2sla3WIJJsmvkrxwiNS1qlUBxiRZqsskv0yyLOVfkv060Cva3rSWDiz1Kci6gidpHqHLdAlPaxMTXsk6NEk+hNRMUcXLvBTcbJQmuKvlPPQ3vAnOeZKO7vSfkEo5nqMlqS24WDNHY2TtdTtZN0JpU97INT7S5jWbaBaXB45gdXCLbSru7xqwAnJrHtLoklQcMe0wpAr0Um3KIptU+i6x3NbuiHEjQnsdYN4fIC+ZtDS/YU7SLvuwfMmqdFjfS7cEiokatSVwV09Mw8fcQhtToMGA3KINLyKsY6eBxab2AYmwioGLYLaTtlAmM34YU5H+mCQT3k3BsdjF/IThjgq0nhwLHeYA6akB31vA7N8EPHsH/c6G1c/aMHqn35ulQUa5MNhwqHRZgn3lPyD6cs+Pcj8fCPtkxP4C+2of+QlUOB9VOKTC1hxOIMPF6CGDech6X6ZTWMr0O5+qiw+zlJ8j9k9gKSIdZfgMniLEaCpDm8r0hKYi/uKm/v+dK3H8ij/YQRr4hv81wX+AsXzrm/oRHQZ0Fg53nyPbvr2vlc8='),
- 		this.addDataEntry('table', 180, 120, 'Table 2', '7ZhRb5swEMc/Da+TDSFJX0u7vrQv7bR3NzjBkvEhcynJPv3OYDeLUlS0JURTkUDyne+M+f05nXCUZOXuwYqqeIJc6ii5j5LMAmA3KneZ1DqKmcqj5C6KY0Z3FH/vmeXtLKuElQaHJMRdwpvQW9l5OkeNe+0ddSEqN0Tx6ly3BZa0zTtOw6ZQKF8qsXLzDb0E+WoUFl/UL+diZK/AoFBGWp+zAq1FVat2sS6iUDp/FHvYYnhMsFz0tjSPlF/7aAvNn6bfv7Qod70MWpcH8CChlGj3FNKoHAsfsew4sUKqTRHSPDwm6s6xec89IKWBp/ox4WQ4YdoyKqGf5QqF2QyBfQozt1D9EHYj0TsqUAalvX8jGgHaWmmdgQaniQHjHoRQ+Ukt1yH3FRChDOA9mPdFWyjpLV2EKWPf0iilt8nI5gebLhduMQNTo6Uvwa0hRY2NrHGogPHfCTg7g36zE/1+tsOY8bMKaYyLPgj5zxoBMV1raMgsVJ5L88HHwIcKkHwqwPxC/NNe/uctpP+S/+6Y/QhyzHvlSCY5QkI8nh6Lqb1crL3sj2Uao9sse8tr9oXKa3G1bnPTyz+d+I/fbTjr1WM+6XGFdsP51G8u3W+WI/YbfnoAEAps8YUKjH9+QnCxijo9IAgKLCcFrtFz+v/4byZBRmg6ZB4OQNu5o/PR3w=='),
- 		this.addDataEntry('table title', 180, 150, 'Table with Title 1', '7VjBbqMwEP0arisMpeleQ7u9tJemP+CGCbZkbGRPQtKv37FxGnWTKJVa0q6CBJLnecbg9xg9mSQvm/W95a14NBWoJL9L8tIag/2oWZegVJKlskry2yTLUrqT7M+RWRZm05Zb0PiRgqwvWHG1hB555i8KetThRkXUCd76IYbZfOqQW5zJV4/lKQFzo5FLDZYAFmKleOtkSL8NGUKq6oFvzBK3C22j6YKqZ/FpvporWWsaz2kbfslpa6Qf3a0IcDEpvjpYhPXR7Qco7v0eTANoN5TSyQpFzLjpKUoFyFpsy4oIctcD9Vvtjk0aREIPk5vvkXuUV3pllFw9wRy5rgPFAhsVd9oJiTBr+dyndvSxHCS4sqZ95rYGjMC/pHlsIZUqjTJeJ220fxCaNk4qWGxrXwyiaWJgIzFviwZSiildRFOZ/iqSgnZTUsx2MV0+3WJptENLX4dfA7jDDhx+VMDssICbSHGU6ZSeV18g59Wwcmrts3dyflopQ8wulOkoFLKqQH+mj/KTfXQ9EO3FSPse7ev3lJ9BhetRhWMqsOx8MkxGSxnaUiZntJSbS+6qybdZyu+R9h9gKSwdZfgJnsLYaCpDmwpjZ3QVtn+qv6DGYqeP/IN10sAn/v+T+G9wlos+qp/QYUBroXD36zLMvfuz+Rc='),
- 		this.addDataEntry('table title', 180, 150, 'Table with Title 2', '7VjBbqMwEP0arivAJdtcod1e0ktT7d0NBiwZG9nTQvbrd2xMsy1B7WoTglaVQJp5nhnwe/gdCEhWd3eaNtW9ypkIyG1AMq0U9FHdZUyIIA55HpCbII5DvIP4x8Rq5FbDhmom4TMNcd/wQsUz65FH+iRYjxrYC4+aijY2BLdKUgNUw5b/shgJEdgpCZRLphGIXC4EbQx35TeuouIi39C9eoZh0JClBe9Y/qBa47u1ajc4zPjWAodv/cvYZSp4KTHe4S7tE9NGcRvdviAwzPA7YxpYN8mOgzw1d0zVDPQeS1qeQ+UrrnsGw4rxshraEg9S0wPla++BbAw838e5JyPuJ2nHVwZOxQPbAZWlU6CCWvidthUHtm3ozpa2+C0d5T/XqnmkumTggWOkFVyITAllZZRK2geBanyDYMXQ+6QAVD2o5Yl5HepISVK8kKYs/JYECe4mwzw65HjZcg2ZkgY0fjx2BqMGWmbgswLGxwXce4q9TB/pSU4g59VIzuikekppqw96/rVU4TupFFJbCNViWvE8Z/JfDhL58CBdnYn3ZMT7TxfG4cL5H1ysr00NPpDLctN3rmYSqHsrzp8H5VyCrf4H33sv5rJ8bzWj730fyXlaPZfte6uL+d71pO8tnP95fW9CoAv43vrL987te+sZfS8KR3qSZR+8k56r9cWML4omnW/hAszrfBMKnd/5MD38wXBrb35w/AY='),
- 		this.addDataEntry('crossfunctional cross-functional cross functional flowchart swimlane table', 400, 400, 'Cross-Functional Flowchart', '5ZjfbpswFMafhstNGJK2u1xY05tOmtYn8OAstmRsZB8C6dPvmD9NN6CNqoStTCKSz/GxcX6f+ZAJ4iSv7ywvxFeTgQri2yBOrDHYtvI6AaWCKJRZEH8JoiikXxBtJ3pZ0xsW3ILGUwZE7YA9VyW0Gbq5cx+2pU5RGs198VaZKhXcYlvs8KC6Yid44ZvIf/jUJhVSZff8YErss320saa6lxocdYS+1Kgy188zDukWD/LRT7jqShQvnGzmbkospKV1cg/fwbWFPgt1wXXWBYWRGsHe7olAP/NPo/GhWzWjmCu509ROwZdSoqMAFqGeJNmkOox3YHJAe6CSSmYo2opV2NIOBcidwD+S3LWJ3dPYozDU6LQZ1yke6PQ5RWMpxYaiVDJXXHs9hLHykf48yfiMTrOO9YYuWlkSflwHaxqXUMyOMV2+3GJitEPLZYMBuMMKHM4o1ynSROPSHHoF2hGvKcWiMyi1Gij1TXAHrymVGq0h7Z6jCz8OJyGNx5HWk0if6J0d6XoSabQgpOxqTqZXk0zjBTGNbuZkej1p0i/u0/dp0mfw5bEdfzljvhmo8/aNPj/J63/Hjj8tGOS8JszCBaOc13sZG6DszffFF9p/a75j8lzOfNnwoPmedjqbOPv9Dftlw7PgglDObMDD09qCWF7UgSk8fqZq+n77ivUL'),
+ 		this.addDataEntry('table', 180, 120, 'Table 1', '7ZjBTuMwEIafJteVnVDoXpuycGAvsC9g6mltyfFE9kAann7txN2qqIgU0aCllRJpZjxO7G9i/3KyoqzWN07U6jdKMFlxnRWlQ6TeqtYlGJPlTMusmGd5zsKd5b/eaOVdK6uFA0tDOuR9h2dhnqCP9AFPrUkBr0QdTRKPMTRTVIVhznkwG6UJHmqxiO1NmESIeRKOHvRLDLHgL9CS0BZc6rNAY0TtdfewPkNpI+9Ei0+0ec3Gm6XhgSNYvznFLpTmdwNYAbk2pDRakkoZ0x4DU6BXatMtsWHC94HVv75bYsFI0PYDLA4EeI9NZIhOv0QwJjF4Tc03ujLCwi0I+So0Q9mmEGGdLANLSuYjEmGVHJemy/aSlw7rP8KtYJOy1MaUaDAWy6KN5a5RW+oATWbhCshK9mOSTcLMyuDzrR+umO6oROvJhaLHx4Lw1IAfXMz8Y8W8+IRaXgyvZRgxaWHuYUHCroasi7AObMze0t8D+7CCYkC5NPGDmistJdihjIt3GV8eCfHkxBGvd/GOQPzyTHxnsx8B+dVZE0bRhHa3ZGNIxPRUVtPVl0nEzxNHPL5EcHZGPrZGcH4WiTFFYjqiSPADTtX/93ri7x+9j7aADjh5f0/IXyAU3+GE3O1L4K6fod+e+CfV4YjqEdztL8GubeeP4V8='),
+ 		this.addDataEntry('table', 180, 120, 'Table 2', '7ZhRb5swEMc/Da+TDSFJX0O27qF7aae9u8EJlowP2ZcR+ulng1maJlbTaaEPIBHpfL5z8O/v0wlHSVYe7jWrih+QcxklX6Mk0wDYWeUh41JGMRF5lKyjOCb2F8XfArO0nSUV01zhNQlxl/CbyT3vPJ3DYCO9wxSsciayZ+daFVja11xTa9aFQP5UsY2br+0mrM8g0/gkXpyL2PEGFDKhuPY5G5CSVUa0i3URhZD5A2tgj/3f9CMXvS/Vg803PlpD/Xro359r5Icgg9blAdxzKDnqxobUIsfCRyw7TqTgYlf0aR4eYaZz7P7mHpFaw1O9TDj5IOFHqB1k0OLFkZN+n2+xmlqUkin+nbP8jWsFeeNdCJW3JN+iN58BEcoep98uuShNrqH6yfSO9yFbIWUGEpyaCpQ7DxUIhS2gdGUfiywjX9IotTvL7Jgex/Zx4RozUAa1PRVuWc4M1tzgtWLG/ybm7D9oOTvT8ldrxoQGRbWvjoLJR75BpnbXVJCtGOWijzJcoP4xZcEy3Up3staFyHOu3KL2ePkDReNr4Sfvwp/fiH0aZB8uqFGwP5xyH0CKeVCKZJLidd8YQIvF1F4GaS/NqWRDdJtlsMxmIymzxad1m7sg+3Tc7IfvNpQEtZhPWgzcbiid+s2Q/WY5YL+h55cBfaEtRlJo9P2bgptV1vlFQU9/OXL6n9Bzwl/6d5MYN246dni8AG3nTu5H/wA='),
+		this.addDataEntry('table title', 180, 150, 'Table with Title 1', '7ZjBbtswDEC/xtfBsuumu8bZusN2afoDasxYAmjJkNk57tePkpVlXdMlBRYXaAI4AEmRcvgogpCTvGw2t0626oetAJP8S5KXzloapWZTAmKSpbpK8kWSZSn/kuzrK6sirKatdGDomIBsDPgp8RFGy718QBitHQ0YrZ2SrRcprObzjqSjpX7ytjxlw8oaktqAY4MIOqJsOx3cF8FDaay+y8E+0najrTZfc/Qyvs1HS9S1YXnFafgt5/FvgiPYvJpqMMU8b8E2QG5gl15XpKLHzYgjVaBrtQ0rolF2o6H+Hbsjx0KEtx9k/gLkvxne2Z7TUtbpJ08OI6Q/uQa91w1KA99AVn+Z5rYaoolsGyWENUXxwRLZJiouppvuLU3lbHsvXQ1bl7VGLC1aX01jja94a7WhAKiY88PIyvRTkRScWcm62On8eHdHpTUdOT4VfluQHfXQ0bHFzPYXc4i4Y8kO1fbqP5T26vjScgKkJd7BiqSpQ6coajCe6l5pgmUrV961554f+8Z4710x9rB/W30tk12jP18LpasKzLHI84P9c30ixMWZI948xzsB8esL8RCQTYd8dhkRU46I2YQj4uZcumn2biPi85kjnn5EiPSCfOoZIcRlSEw5JISYcEqIl7ftD9pQ4vBV/GQd9Iab+MeE/A6T4myuyAeYn3BUsLr7LBjWnn01/AU='),
+		this.addDataEntry('table title', 180, 150, 'Table with Title 2', '7VhLc5swEP41XDs8ghtfwWl6cC9xpnfFLKAZITHSJpj8+q6EqJPaJG5aPw6ZwTP7lNnv034HgiRvNreatfUPVYAIkpsgybVSOFjNJgchgjjkRZAsgjgO6RfE3yaykcuGLdMg8ZCGeGh4YuIRhsg9exAwRA32wkdNzVprossmmUGmccWfbSwJKbBWEhmXoCkQOV8I1hruyheuouaiWLJePeJ40OhlJd9Acac647u16pZ0mPGtJR2+8i9j0/6lQSNsJgd3IT/1LagGUPdU0vECa19xPYAT1sCremxLfZCZIVD97t3iSIaHcj+syQ6sbyNKo9NYtdL82eIo/NwvUXZ+xxvBJHwHVvwRylTR+xCq1lsCSvTmg0JUjXe0HzfcS1ShVXvPdAVjScmFyJVQlluppOW/VVyiAyjN6CHI8vBLGqQ0WU5+tPXpseUacyUNaroj9lhgBjsweCiZ8X4yew+3p+w9bpP/QO3VDrXRJLc0AXIm7mCNTFZucWpshL/FXc0RVi1b29KOJGBYI2mrt2zsAf/vCFYEbSnsBVvUvChAjvSBvnmCgcWDlyp5d6mujoR7uoP7T2fG4YXjzwSvCPPFUJsZ+kMuq+XQOZsg6F/I2Lwm4uVSHIuc2afenVLvZifUu6871E5zexH79uF1mp1N264nte3CsT6etk2QcQZtm39q2ym1bX5CbYvCHW6Ty164D+/T/GziFkWT6nbhYB9P3SbYOL66kbv9uOByr749/AI='),
+		this.addDataEntry('crossfunctional cross-functional cross functional flowchart swimlane table', 400, 400, 'Cross-Functional Flowchart', '7ZjRatswFIafxpcDy87a7nJJlvZig9HuBVT7JBLIOkZSGrtPPymS2622Gwc6z6WGXBz9HBnxfxz+cKJ0VVTXipbsB+YgovRblMTul64Uonk+N2pRrUAIW/M8StdR4vQkSjYDOsmxMy6pAmnOvZz4yw9U7MEr9oFaf9rsZWY4SuqaNwIPGaPK+GZtahGaNaOlKw29d9IyY1zk32mNe9OozWmpjf3CHX90/YvYNaMQtNT8eHXtFAXZXmn+ALegfaNToSqpzMNhi9LchQcQew7vB2Wg6vXjKL0w49mSa8ACjKrt+cBzw/ydRexdjBnwHTMvRKq9sHu62224FYPnp1mkLRZfM4PKSuR142/xYJ1gqPijdcci81a1DNcHXggq4QZoY2cjLTGvg2SwDJWArQnlPRqDRYMpGOLqXGH5i6odNMKWC7FCYd+driVKGBV0MhR03fD03zjFnST/kPuixf0noxq6uQdeg2n+aaMfOikhC/PaB+w/jmo6lGDVS/AJ1mgEP/cSTGaCpwiSiykgvOhFmM4ITyFMrqaA8LI3PzumcM7Pt8jPrtkdP0CvWuAnMLLjTuzle4zNLzO3c7lNIyxJPJM7l9w0MpKQ3pDs+J8zh+RbhGQX+fFDkrRXPR9uZsngRdCUYpK0F0MzuXcSlO3dzoxuUkl5FJudfOj4a3H/Gw=='),
  		this.createVertexTemplateEntry('text;html=1;strokeColor=#c0c0c0;fillColor=#ffffff;overflow=fill;rounded=0;', 280, 160,
  			'<table border="1" width="100%" height="100%" cellpadding="4" style="width:100%;height:100%;border-collapse:collapse;">' +
  			'<tr style="background-color:#A7C942;color:#ffffff;border:1px solid #98bf21;"><th align="left">Title 1</th><th align="left">Title 2</th><th align="left">Title 3</th></tr>' +
@@ -1747,11 +1768,11 @@ Sidebar.prototype.addUmlPalette = function(expand)
 			
 			return sb.createVertexTemplateFromCells([cell.clone()], cell.geometry.width, cell.geometry.height, 'Interface 2');
 		}),
-		this.createVertexTemplateEntry('shape=providedRequiredInterface;html=1;verticalLabelPosition=bottom;', 20, 20, '', 'Provided/Required Interface', null, null, 'uml provided required interface lollipop notation'),
-		this.createVertexTemplateEntry('shape=requiredInterface;html=1;verticalLabelPosition=bottom;', 10, 20, '', 'Required Interface', null, null, 'uml required interface lollipop notation'),
+		this.createVertexTemplateEntry('shape=providedRequiredInterface;html=1;verticalLabelPosition=bottom;sketch=0;', 20, 20, '', 'Provided/Required Interface', null, null, 'uml provided required interface lollipop notation'),
+		this.createVertexTemplateEntry('shape=requiredInterface;html=1;verticalLabelPosition=bottom;sketch=0;', 10, 20, '', 'Required Interface', null, null, 'uml required interface lollipop notation'),
 		this.addEntry('uml lollipop notation provided required interface', function()
 		{
-			return sb.createVertexTemplateFromData('zVTBrptADPyavVYEkt4b0uQd3pMq5dD2uAUD27dgZJwE8vX1spsQlETtpVWRIjFjex3PmFVJWvc70m31hjlYlXxWSUqI7N/qPgVrVRyZXCUbFceR/FS8fRJdjNGo1QQN/0lB7AuO2h7AM57oeLCBIDw0Obj8SCVrJK6wxEbbV8RWyIWQP4F52Juzq9AHRqEqrm2IQpN/IsKTwAYb8MzWWBuO9B0hL2E2BGsqIQyxvJ9rzApD7QBrYBokhcBqNsf5UbrzsLzmXUu/oJET42jwGat5QYcHyiDkTDLKy03TiRrFfSx08m+FrrQtUkOZvZdbFKThmwMfVhf4fQ43/W3uZriiPPT+KKhjwnf4anKuQv//wsg+NPJ7/9d9Xf7eVykwbeeMOFWGYd/qzEVO8tHP/Suw4a2ujXV/+gXsEdhkOgSC8os44BQt0tggicZHeG1N2QiXibhAV48epRayEDd8MT7Ct06TUaXVWq027tCuhcx5VZjebeeaoDNn/WMcb/p+j0AM/dNr6InLl4Lgzylsk6OCgRWYsuI592gNZh5OhgmcblPv7+1l+ws=',
+			return sb.createVertexTemplateFromData('zVRNT8MwDP01uaLSMu6sfFxAmrQDcAytaQJZXLnu2u7XkzQZXTUmuIA4VIqf/ZzkvdQiyzf9HclaPWAJRmQ3IssJkcNq0+dgjEgTXYrsWqRp4j6R3p7Ino/ZpJYEln9CSANhK00LAQlAw4OJAGFrS/D1iciWSKywQivNPWLtwHMHvgHzsNY7z5Ato4MUb0zMgi2viLBzoUULAbnVxsSWzTtwofYBtlTACkhvgIHWtSy0rWKSJVXAJ5Lh4FBWMNMicAJ0cSzPWBW1uQN0fWlwJQRGst7OW8kmhNVn3Sd1hdp1TJMhVCzmhHipUDO54RYHm07Q6NHXfmV/65eS5jXXVJhj15yCNDz54GyxD58PwjL2v/SmMuE7POqSVdxj5vm/cK6PG4X/5deNvPjeSEfQdeOV75Rm8K/dZzo3LOaGSaMr69aF0wbIA00NhZfpVff+JSwJGr2TL2Nnr3jtbzDeabEUi2v/Tlo22kKO1gbq0Z8ZDwzE0J+cNidM2ROinF18CR6KeivQleI59pVrM8knfV04Dc1gx+FM/QA=',
 				40, 10, 'Lollipop Notation');
 		}),
 		this.createVertexTemplateEntry('shape=umlBoundary;whiteSpace=wrap;html=1;', 100, 80, 'Boundary Object', 'Boundary Object', null, null, 'uml boundary object'),
@@ -2044,7 +2065,7 @@ Sidebar.prototype.createTitle = function(label)
 /**
  * Creates a thumbnail for the given cells.
  */
-Sidebar.prototype.createThumb = function(cells, width, height, parent, title, showLabel, showTitle, realWidth, realHeight)
+Sidebar.prototype.createThumb = function(cells, width, height, parent, title, showLabel, showTitle)
 {
 	this.graph.labelsVisible = (showLabel == null || showLabel);
 	var fo = mxClient.NO_FO;
@@ -2094,10 +2115,12 @@ Sidebar.prototype.createThumb = function(cells, width, height, parent, title, sh
 		parent.style.height = (this.thumbHeight + border + this.sidebarTitleSize + 8) + 'px';
 		
 		var div = document.createElement('div');
+		div.style.color = Editor.isDarkMode() ? '#A0A0A0' : '#303030';
 		div.style.fontSize = this.sidebarTitleSize + 'px';
-		div.style.color = '#303030';
 		div.style.textAlign = 'center';
 		div.style.whiteSpace = 'nowrap';
+		div.style.overflow = 'hidden';
+		div.style.textOverflow = 'ellipsis';
 		
 		if (mxClient.IS_IE)
 		{
@@ -2156,14 +2179,15 @@ Sidebar.prototype.createItem = function(cells, title, showLabel, showTitle, widt
 	});
 	
 	// Applies default styles
+	var originalCells = cells;
 	cells = this.graph.cloneCells(cells);
-	this.editorUi.insertHandler(cells, null, this.graph.model,
-		Graph.prototype.defaultVertexStyle,
-		Graph.prototype.defaultEdgeStyle,
-		urlParams['sketch'] == '1',
-		urlParams['sketch'] == '1');
+	this.editorUi.insertHandler(originalCells, null, this.graph.model,
+		this.editorUi.editor.graph.defaultVertexStyle,
+		this.editorUi.editor.graph.defaultEdgeStyle,
+		true, true);
 
-	this.createThumb(cells, this.thumbWidth, this.thumbHeight, elt, title, showLabel, showTitle, width, height);
+	this.createThumb(originalCells, this.thumbWidth, this.thumbHeight,
+		elt, title, showLabel, showTitle, width, height);
 	var bounds = new mxRectangle(0, 0, width, height);
 	
 	if (cells.length > 1 || cells[0].vertex)
@@ -3570,6 +3594,11 @@ Sidebar.prototype.addClickHandler = function(elt, ds, cells)
  */
 Sidebar.prototype.createVertexTemplateEntry = function(style, width, height, value, title, showLabel, showTitle, tags)
 {
+	if (tags != null && title != null)
+	{
+		tags += ' ' + title;
+	}
+
 	tags = (tags != null && tags.length > 0) ? tags : ((title != null) ? title.toLowerCase() : '');
 	
 	return this.addEntry(tags, mxUtils.bind(this, function()
@@ -3585,7 +3614,7 @@ Sidebar.prototype.createVertexTemplate = function(style, width, height, value, t
 {
 	var cells = [new mxCell((value != null) ? value : '', new mxGeometry(0, 0, width, height), style)];
 	cells[0].vertex = true;
-	
+
 	return this.createVertexTemplateFromCells(cells, width, height, title, showLabel, showTitle, allowCellsInserted, showTooltip);
 };
 
@@ -3645,9 +3674,9 @@ Sidebar.prototype.createEdgeTemplate = function(style, width, height, value, tit
 /**
  * Creates a drop handler for inserting the given cells.
  */
-Sidebar.prototype.createEdgeTemplateFromCells = function(cells, width, height, title, showLabel, allowCellsInserted, showTooltip)
+Sidebar.prototype.createEdgeTemplateFromCells = function(cells, width, height, title, showLabel, allowCellsInserted, showTooltip, showTitle)
 {	
-	return this.createItem(cells, title, showLabel, true, width, height, allowCellsInserted, showTooltip);
+	return this.createItem(cells, title, showLabel, (showTitle != null) ? showTitle : true, width, height, allowCellsInserted, showTooltip);
 };
 
 /**

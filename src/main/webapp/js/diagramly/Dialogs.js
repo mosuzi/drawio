@@ -214,7 +214,10 @@ var StorageDialog = function(editorUi, fn, rowLimit)
 			addLogo(IMAGE_PATH + '/onedrive-logo.svg', mxResources.get('oneDrive'), App.MODE_ONEDRIVE, 'oneDrive');
 		}
 	
-		addLogo(IMAGE_PATH + '/osa_drive-harddisk.png', mxResources.get('device'), App.MODE_DEVICE);
+		if (urlParams['noDevice'] != '1')
+		{
+			addLogo(IMAGE_PATH + '/osa_drive-harddisk.png', mxResources.get('device'), App.MODE_DEVICE);			
+		}
 		
 		if (isLocalStorage && (urlParams['browser'] == '1' || urlParams['offline'] == '1'))
 		{
@@ -246,9 +249,16 @@ var StorageDialog = function(editorUi, fn, rowLimit)
 	addButtons();
 
 	var later = document.createElement('span');
-	later.style.cssText = 'position:absolute;cursor:pointer;bottom:27px;color:gray;userSelect:none;text-align:center;left:50%;';
+	later.style.position = 'absolute';
+	later.style.cursor = 'pointer';
+	later.style.bottom = '27px';
+	later.style.color = 'gray';
+	later.style.userSelect = 'none';
+	later.style.textAlign = 'center';
+	later.style.left = '50%';
 	mxUtils.setPrefixedStyle(later.style, 'transform', 'translate(-50%,0)');
 	mxUtils.write(later, mxResources.get('decideLater'));
+	div.appendChild(later);
 
 	mxEvent.addListener(later, 'click', function()
 	{
@@ -258,9 +268,7 @@ var StorageDialog = function(editorUi, fn, rowLimit)
 			null, null, null, null, null, null, true);
 		Editor.useLocalStorage = prev;
 	});
-
-	div.appendChild(later);
-
+	
 	// Checks if Google Drive is missing after a 5 sec delay
 	if (mxClient.IS_SVG && isLocalStorage && urlParams['gapi'] != '0' &&
 		(document.documentMode == null || document.documentMode >= 10))
@@ -304,7 +312,6 @@ var SplashDialog = function(editorUi)
 		}
 	}
 	
-	var serviceCount = editorUi.getServiceCount();
 	var logo = document.createElement('img');
 	logo.setAttribute('border', '0');
 	logo.setAttribute('align', 'absmiddle');
@@ -419,7 +426,7 @@ var SplashDialog = function(editorUi)
 	}
 	else
 	{
-		buttons.style.padding = '42px 0px 56px 0px';
+		buttons.style.padding = '42px 0px 10px 0px';
 		btn.style.marginBottom = '12px';
 	}
 
@@ -856,6 +863,7 @@ var EmbedDialog = function(editorUi, result, timeout, ignoreSize, previewFn, tit
 					var url = 'https://twitter.com/intent/tweet?text=' + 
 						encodeURIComponent(tweet) + '&url=' +
 						encodeURIComponent(text.value);
+
 					editorUi.openLink(url);
 				}
 				catch (e)
@@ -882,6 +890,44 @@ var EmbedDialog = function(editorUi, result, timeout, ignoreSize, previewFn, tit
 		}
 	}
 	
+	if (!editorUi.isOffline() && result.length < maxSize)
+	{
+		var emailBtn = mxUtils.button('', function()
+		{
+			try
+			{
+				var url = 'mailto:?subject=' +
+					encodeURIComponent(filename || editorUi.defaultFilename) + '&body=' +
+					encodeURIComponent(text.value);
+
+				editorUi.openLink(url);
+			}
+			catch (e)
+			{
+				editorUi.handleError({message: e.message || mxResources.get('drawingTooLarge')});
+			}
+		});
+		
+		var img = document.createElement('img');
+		img.setAttribute('src', Editor.mailImage);
+		img.setAttribute('width', '18');
+		img.setAttribute('height', '18');
+		img.setAttribute('border', '0');
+		img.style.marginBottom = '5px'
+		
+		if (Editor.isDarkMode())
+		{
+			img.style.filter = 'invert(100%)';
+		}
+
+		emailBtn.appendChild(img);
+		emailBtn.style.verticalAlign = 'bottom';
+		emailBtn.style.paddingTop = '4px';
+		emailBtn.style.minWidth = '46px'
+		emailBtn.className = 'geBtn';
+		buttons.appendChild(emailBtn);
+	}
+
 	var closeBtn = mxUtils.button(mxResources.get('close'), function()
 	{
 		editorUi.hideDialog();
@@ -1276,7 +1322,7 @@ var CreateGraphDialog = function(editorUi, title, type)
 		graph.connectionHandler.createEdgeState = function(me)
 		{
 			var edge = graph.createEdge(null, null, null, null, null, edgeStyle);
-			
+
 			return new mxCellState(this.graph.view, edge, this.graph.getCellStyle(edge));
 		};
 	
@@ -1570,7 +1616,7 @@ var BackgroundImageDialog = function(editorUi, applyFn, img)
 		}
 	}
 
-	if (isPageLink || editorUi.pages == null || editorUi.pages.length == 1)
+	if (!isPageLink && (editorUi.pages == null || editorUi.pages.length == 1))
 	{
 		urlRadio.style.display = 'none';
 		pageRadio.style.display = 'none';
@@ -1890,7 +1936,8 @@ var BackgroundImageDialog = function(editorUi, applyFn, img)
  */
 var ParseDialog = function(editorUi, title, defaultType)
 {
-	var plantUmlExample = '@startuml\nskinparam shadowing false\nAlice -> Bob: Authentication Request\nBob --> Alice: Authentication Response\n\nAlice -> Bob: Another authentication Request\nAlice <-- Bob: Another authentication Response\n@enduml';
+	var plantUmlExample = '@startuml\nskinparam shadowing false\nAlice -> Bob: Authentication Request\nBob --> Alice: Authentication Response\n\n' +
+		'Alice -> Bob: Another authentication Request\nAlice <-- Bob: Another authentication Response\n@enduml';
 	var insertPoint = editorUi.editor.graph.getFreeInsertPoint();
 
 	function parse(text, type, evt)
@@ -2000,10 +2047,33 @@ var ParseDialog = function(editorUi, title, defaultType)
 		else if (type == 'table')
 		{
 			var tableCell = null;
-			var rows = null;
 			var cells = [];
 			var dx = 0;
+			var pkMap = {};
 
+			//First pass to find primary keys
+			for (var i = 0; i < lines.length; i++)
+			{
+				var line = mxUtils.trim(lines[i]);
+				
+				if (line.substring(0, 11).toLowerCase() == 'primary key')
+				{
+					var pk = line.match(/\((.+)\)/);
+					
+					if (pk && pk[1])
+					{
+						pkMap[pk[1]] = true;						
+					}
+					
+					lines.splice(i, 1);
+				}
+				else if (line.toLowerCase().indexOf('primary key') > 0)
+				{
+					pkMap[line.split(' ')[0]] = true;
+					lines[i] = mxUtils.trim(line.replace(/primary key/i, ''));
+				}
+			}
+			
 			for (var i = 0; i < lines.length; i++)
 			{
 				var tmp = mxUtils.trim(lines[i]);
@@ -2018,7 +2088,8 @@ var ParseDialog = function(editorUi, title, defaultType)
 					}
 					
 					tableCell = new mxCell(name, new mxGeometry(dx, 0, 160, 40),
-						'shape=table;startSize=30;container=1;collapsible=1;childLayout=tableLayout;fixedRows=1;rowLines=0;fontStyle=1;align=center;resizeLast=1;');
+						'shape=table;startSize=30;container=1;collapsible=1;childLayout=tableLayout;' +
+						'fixedRows=1;rowLines=0;fontStyle=1;align=center;resizeLast=1;');
 					tableCell.vertex = true;
 					cells.push(tableCell);
 					
@@ -2037,38 +2108,35 @@ var ParseDialog = function(editorUi, title, defaultType)
 				else if (tmp != '(' && tableCell != null)
 				{
 					var name = tmp.substring(0, (tmp.charAt(tmp.length - 1) == ',') ? tmp.length - 1 : tmp.length);
+				
+					var pk = pkMap[name.split(' ')[0]];
+					var rowCell = new mxCell('', new mxGeometry(0, 0, 160, 30),
+						'shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;' +
+						'collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;' +
+						'top=0;left=0;right=0;bottom=' + (pk ? '1' : '0') + ';');
+					rowCell.vertex = true;
 					
-					if (name.substring(0, 11).toLowerCase() != 'primary key')
-					{
-						var pk = name.toLowerCase().indexOf('primary key');
-						name = name.replace(/primary key/i, '');
-						
-						var rowCell = new mxCell('', new mxGeometry(0, 0, 160, 30),
-							'shape=partialRectangle;collapsible=0;dropTarget=0;pointerEvents=0;fillColor=none;' +
-							'points=[[0,0.5],[1,0.5]];portConstraint=eastwest;top=0;left=0;right=0;bottom=' +
-							((pk > 0) ? '1' : '0') + ';');
-						rowCell.vertex = true;
-						
-						var left = new mxCell((pk > 0) ? 'PK' : '', new mxGeometry(0, 0, 30, 30),
-							'shape=partialRectangle;overflow=hidden;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=0;' + ((pk > 0) ? 'fontStyle=1;' : ''));
-						left.vertex = true;
-						rowCell.insert(left);
-						
-						var right = new mxCell(name, new mxGeometry(30, 0, 130, 30),
-							'shape=partialRectangle;overflow=hidden;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=0;align=left;spacingLeft=6;' + ((pk > 0) ? 'fontStyle=5;' : ''));
-						right.vertex = true;
-						rowCell.insert(right);
-						
-			   			var size = editorUi.editor.graph.getPreferredSizeForCell(right);
-			   			
-			   			if (size != null && tableCell.geometry.width < size.width + 30)
-			   			{
-			   				tableCell.geometry.width = Math.min(320, Math.max(tableCell.geometry.width, size.width + 30));
-			   			}
-			   			
-			   			tableCell.insert(rowCell);
-			   			tableCell.geometry.height += 30;
-					}
+					var left = new mxCell(pk ? 'PK' : '', new mxGeometry(0, 0, 30, 30),
+						'shape=partialRectangle;overflow=hidden;connectable=0;fillColor=none;' +
+						'top=0;left=0;bottom=0;right=0;' + (pk ? 'fontStyle=1;' : ''));
+					left.vertex = true;
+					rowCell.insert(left);
+					
+					var right = new mxCell(name, new mxGeometry(30, 0, 130, 30),
+						'shape=partialRectangle;overflow=hidden;connectable=0;fillColor=none;align=left;' +
+						'top=0;left=0;bottom=0;right=0;spacingLeft=6;' + (pk ? 'fontStyle=5;' : ''));
+					right.vertex = true;
+					rowCell.insert(right);
+					
+		   			var size = editorUi.editor.graph.getPreferredSizeForCell(right);
+		   			
+		   			if (size != null && tableCell.geometry.width < size.width + 30)
+		   			{
+		   				tableCell.geometry.width = Math.min(320, Math.max(tableCell.geometry.width, size.width + 30));
+		   			}
+		   			
+		   			tableCell.insert(rowCell, pk? 0 : null);
+		   			tableCell.geometry.height += 30;
 				}
 			}
 			
@@ -2235,15 +2303,37 @@ var ParseDialog = function(editorUi, title, defaultType)
 							cells[i].geometry.height = Math.max(cells[i].geometry.height, size.height);
 						}
 					}
-	
-					var layout = new mxFastOrganicLayout(graph);
-					layout.disableEdgeStyle = false;
-					layout.forceConstant = 120;
-					layout.execute(graph.getDefaultParent());
+
+					var runEdgeLayout = true;
+
+					if (type == 'horizontalFlow' || type == 'verticalFlow')
+					{
+						var flowLayout = new mxHierarchicalLayout(graph,
+							(type == 'horizontalFlow') ?
+							mxConstants.DIRECTION_WEST :
+							mxConstants.DIRECTION_NORTH);
+						flowLayout.execute(graph.getDefaultParent(), cells);
+						runEdgeLayout = false;
+					}
+					else if (type == 'circle')
+					{
+						var circleLayout = new mxCircleLayout(graph);
+						circleLayout.execute(graph.getDefaultParent());
+					}
+					else
+					{
+						var layout = new mxFastOrganicLayout(graph);
+						layout.disableEdgeStyle = false;
+						layout.forceConstant = 180;
+						layout.execute(graph.getDefaultParent());
+					}
 					
-					var edgeLayout = new mxParallelEdgeLayout(graph);
-					edgeLayout.spacing = 20;
-					edgeLayout.execute(graph.getDefaultParent());
+					if (runEdgeLayout)
+					{
+						var edgeLayout = new mxParallelEdgeLayout(graph);
+						edgeLayout.spacing = 30;
+						edgeLayout.execute(graph.getDefaultParent());
+					}
 				}
 				finally
 				{
@@ -2281,6 +2371,7 @@ var ParseDialog = function(editorUi, title, defaultType)
 	div.style.textAlign = 'right';
 	
 	var textarea = document.createElement('textarea');
+	textarea.style.boxSizing = 'border-box';
 	textarea.style.resize = 'none';
 	textarea.style.width = '100%';
 	textarea.style.height = '354px';
@@ -2330,10 +2421,25 @@ var ParseDialog = function(editorUi, title, defaultType)
 	var diagramOption = document.createElement('option');
 	diagramOption.setAttribute('value', 'diagram');
 	mxUtils.write(diagramOption, mxResources.get('diagram'));
+
+	var circleOption = document.createElement('option');
+	circleOption.setAttribute('value', 'circle');
+	mxUtils.write(circleOption, mxResources.get('circle'));
+
+	var horizontalFlowOption = document.createElement('option');
+	horizontalFlowOption.setAttribute('value', 'horizontalFlow');
+	mxUtils.write(horizontalFlowOption, mxResources.get('horizontalFlow'));
+	
+	var verticalFlowOption = document.createElement('option');
+	verticalFlowOption.setAttribute('value', 'verticalFlow');
+	mxUtils.write(verticalFlowOption, mxResources.get('verticalFlow'));
 	
 	if (defaultType != 'plantUml')
 	{
 		typeSelect.appendChild(diagramOption);
+		typeSelect.appendChild(circleOption);
+		typeSelect.appendChild(horizontalFlowOption);
+		typeSelect.appendChild(verticalFlowOption);
 	}
 
 	var plantUmlSvgOption = document.createElement('option');
@@ -2505,6 +2611,8 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 		leftHighlight, rightHighlight, rightHighlightBorder, itemPadding, templateFile,
 		recentDocsCallback, searchDocsCallback, openExtDocCallback, showImport, createButtonLabel, customTempCallback, withoutType)
 {
+	var ww = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+	var smallScreen = ww < 500;
 	showName = (showName != null) ? showName : true;
 	createOnly = (createOnly != null) ? createOnly : false;
 	leftHighlight = (leftHighlight != null) ? leftHighlight : '#ebf2f9';
@@ -2570,15 +2678,15 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 		logo.src = IMAGE_PATH + '/osa_drive-harddisk.png';
 	}
 
-	if (!compact && showName)
+	if (!compact && !smallScreen && showName)
 	{
 		header.appendChild(logo);
 	}
 	
 	if (showName)
 	{
-		mxUtils.write(header, ((editorUi.mode == null || editorUi.mode == App.MODE_GOOGLE ||
-				editorUi.mode == App.MODE_BROWSER) ? mxResources.get('diagramName') : mxResources.get('filename')) + ':');
+		mxUtils.write(header, (smallScreen? mxResources.get('name') : ((editorUi.mode == null || editorUi.mode == App.MODE_GOOGLE ||
+				editorUi.mode == App.MODE_BROWSER) ? mxResources.get('diagramName') : mxResources.get('filename'))) + ':');
 	}
 	
 	var ext = '.drawio';
@@ -2615,7 +2723,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 	var nameInput = document.createElement('input');
 	nameInput.setAttribute('value', editorUi.defaultFilename + ext);
 	nameInput.style.marginLeft = '10px';
-	nameInput.style.width = (compact) ? '144px' : '244px';
+	nameInput.style.width = (compact || smallScreen) ? '144px' : '244px';
 	
 	this.init = function()
 	{
@@ -2649,7 +2757,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 
 		if (withoutType)
 		{
-			nameInput.style.width = (compact) ? '350px' : '450px';
+			nameInput.style.width = (compact || smallScreen) ? '350px' : '450px';
 		}
 		else
 		{
@@ -2657,7 +2765,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 			{
 				var typeSelect = FilenameDialog.createFileTypes(editorUi, nameInput, editorUi.editor.diagramFileTypes);
 				typeSelect.style.marginLeft = '6px';
-				typeSelect.style.width = (compact) ? '80px' : '180px';
+				typeSelect.style.width = (compact || smallScreen) ? '80px' : '180px';
 				header.appendChild(typeSelect);
 			}
 			
@@ -3118,6 +3226,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 		
 		// Shows a tooltip with the rendered template
 		var loading = false;
+		var extImg = null;
 		
 		function showTooltip(xml, x, y)
 		{
@@ -3142,7 +3251,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 						wasVisible = editorUi.sidebar.tooltip != null &&
 							editorUi.sidebar.tooltip.style.display != 'none';
 						selectElement(elt, null, null, url, infoObj, clibs);
-					}, true);
+					}, true, false);
 			}
 		};
 
@@ -3151,6 +3260,18 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 			if (url != null && !loading && editorUi.sidebar.currentElt != elt)
 			{
 				editorUi.sidebar.hideTooltip();
+				
+				if (extImg != null)
+				{
+					//Create a diagram with the image to use the same code
+					//Note: Without compression it doesn't work for some reason. Find out why later
+					var xml = '<mxfile><diagram id="d" name="n">' + Graph.compress('<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>' +
+						'<mxCell id="2" value="" style="shape=image;image=' + extImg.src + ';imageAspect=1;" parent="1" vertex="1"><mxGeometry width="' + 
+						extImg.naturalWidth + '" height="' + extImg.naturalHeight + '" as="geometry" /></mxCell></root></mxGraphModel>') + '</diagram></mxfile>';
+					showTooltip(xml, mxEvent.getClientX(evt), mxEvent.getClientY(evt));
+					return;
+				}
+				
 				editorUi.sidebar.currentElt = elt;
 				loading = true;
 				
@@ -3180,6 +3301,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 			img.setAttribute('alt', tooltip);
 			img.style.maxWidth = w + 'px';
 			img.style.maxHeight = h + 'px';
+			extImg = img;
 			
 			var fallbackImgUrl = imgUrl.replace('.drawio.xml', '').replace('.drawio', '').replace('.xml', '');
 			elt.appendChild(img);
@@ -3218,10 +3340,32 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 			
 			if (title != null)
 			{
-				elt.innerHTML = '<table width="100%" height="100%" style="line-height:1.3em;' + (Editor.isDarkMode() ? '' : 'background:rgba(255,255,255,0.85);') +
-					'border:inherit;"><tr><td align="center" valign="middle"><span style="display:inline-block;padding:4px 8px 4px 8px;user-select:none;' +
-					'border-radius:3px;background:rgba(255,255,255,0.85);overflow:hidden;text-overflow:ellipsis;max-width:' + (w - 34) + 'px;">' +
-					mxUtils.htmlEntities(mxResources.get(title, null, title)) + '</span></td></tr></table>';
+				var table = document.createElement('table');
+				table.setAttribute('width', '100%');
+				table.setAttribute('height', '100%');
+				table.style.background = Editor.isDarkMode() ? 'transparent' : 'rgba(255,255,255,0.85)';
+				table.style.lineHeight = '1.3em';
+				table.style.border = 'inherit';
+				var tbody = document.createElement('tbody');
+				var row = document.createElement('tr');
+				var td = document.createElement('td');
+				td.setAttribute('align', 'center');
+				td.setAttribute('valign', 'middle');
+				var span = document.createElement('span');
+				span.style.display = 'inline-block';
+				span.style.padding = '4px 8px 4px 8px';
+				span.style.userSelect = 'none';
+				span.style.borderRadius = '3px';
+				span.style.background = 'rgba(255,255,255,0.85)';
+				span.style.overflow = 'hidden';
+				span.style.textOverflow = 'ellipsis';
+				span.style.maxWidth = (w - 34) + 'px';
+				mxUtils.write(span, mxResources.get(title, null, title));
+				td.appendChild(span);
+				row.appendChild(td);
+				tbody.appendChild(row);
+				table.appendChild(tbody);
+				elt.appendChild(table);
 			}
 			
 			function activate(doCreate)
@@ -3260,11 +3404,31 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 		}
 		else
 		{
-			elt.innerHTML = '<table width="100%" height="100%" style="line-height:1.3em;"><tr>' +
-				'<td align="center" valign="middle"><span style="display:inline-block;padding:4px 8px 4px 8px;user-select:none;' +
-				'border-radius:3px;background:#ffffff;overflow:hidden;text-overflow:ellipsis;max-width:' + (w - 34) + 'px;">' +
-				mxUtils.htmlEntities(mxResources.get(title, null, title)) + '</span></td></tr></table>';
-			
+			var table = document.createElement('table');
+			table.setAttribute('width', '100%');
+			table.setAttribute('height', '100%');
+			table.style.lineHeight = '1.3em';
+			var tbody = document.createElement('tbody');
+			var row = document.createElement('tr');
+			var td = document.createElement('td');
+			td.setAttribute('align', 'center');
+			td.setAttribute('valign', 'middle');
+			var span = document.createElement('span');
+			span.style.display = 'inline-block';
+			span.style.padding = '4px 8px 4px 8px';
+			span.style.userSelect = 'none';
+			span.style.borderRadius = '3px';
+			span.style.background = '#ffffff';
+			span.style.overflow = 'hidden';
+			span.style.textOverflow = 'ellipsis';
+			span.style.maxWidth = (w - 34) + 'px';
+			mxUtils.write(span, mxResources.get(title, null, title));
+			td.appendChild(span);
+			row.appendChild(td);
+			tbody.appendChild(row);
+			table.appendChild(tbody);
+			elt.appendChild(table);
+
 			if (select)
 			{
 				selectElement(elt);
@@ -3860,7 +4024,8 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 		btns.appendChild(cancelBtn);
 	}
 
-	if (!compact && urlParams['embed'] != '1' && !createOnly)
+	if (!compact && urlParams['embed'] != '1' && !createOnly && 
+			!mxClient.IS_ANDROID && !mxClient.IS_IOS && urlParams['noDevice'] != '1')
 	{
 		var fromTmpBtn = mxUtils.button(mxResources.get('fromTemplateUrl'), function()
 		{
@@ -3937,6 +4102,7 @@ NewDialog.tagsList = {};
 var CreateDialog = function(editorUi, title, createFn, cancelFn, dlgTitle, btnLabel, overrideExtension, allowBrowser,
 	allowTab, helpLink, showDeviceButton, rowLimit, data, mimeType, base64Encoded, hints, hideDialog)
 {
+	showDeviceButton = urlParams['noDevice'] == '1'? false : showDeviceButton;
 	overrideExtension = (overrideExtension != null) ? overrideExtension : true;
 	allowBrowser = (allowBrowser != null) ? allowBrowser : true;
 	rowLimit = (rowLimit != null) ? rowLimit : 4;
@@ -3989,7 +4155,7 @@ var CreateDialog = function(editorUi, title, createFn, cancelFn, dlgTitle, btnLa
 		{
 			var typeSelect = FilenameDialog.createFileTypes(editorUi, nameInput, editorUi.editor.diagramFileTypes);
 			typeSelect.style.marginLeft = '6px';
-			typeSelect.style.width = '80px';
+			typeSelect.style.width = '90px';
 			div.appendChild(typeSelect);
 		}
 		
@@ -3999,7 +4165,7 @@ var CreateDialog = function(editorUi, title, createFn, cancelFn, dlgTitle, btnLa
 	var copyBtn = null;
 	
 	// Disables SVG preview if SVG is not supported in browser
-	if (data != null && mimeType != null && (mimeType.substring(0, 6) == 'image/' &&
+	if (urlParams['noDevice'] != '1' && data != null && mimeType != null && (mimeType.substring(0, 6) == 'image/' &&
 		(mimeType.substring(0, 9) != 'image/svg' || mxClient.IS_SVG)))
 	{
 		nameInput.style.width = '160px';
@@ -4251,7 +4417,7 @@ var CreateDialog = function(editorUi, title, createFn, cancelFn, dlgTitle, btnLa
 	}
 	
 	if (!Editor.useLocalStorage || urlParams['storage'] == 'device' ||
-		(editorUi.getCurrentFile() != null/* && !mxClient.IS_IOS*/))
+		(editorUi.getCurrentFile() != null/* && !mxClient.IS_IOS*/ && urlParams['noDevice'] != '1'))
 	{
 		var deviceOption = document.createElement('option');
 		deviceOption.setAttribute('value', App.MODE_DEVICE);
@@ -4481,7 +4647,7 @@ var CreateDialog = function(editorUi, title, createFn, cancelFn, dlgTitle, btnLa
 /**
  * 
  */
-CreateDialog.showDownloadButton = true;
+CreateDialog.showDownloadButton = urlParams['noDevice'] != '1';
 
 /**
  * Constructs a new popup dialog.
@@ -4492,6 +4658,7 @@ var PopupDialog = function(editorUi, url, pre, fallback, hideDialog)
 	
 	var div = document.createElement('div');
 	div.style.textAlign = 'left';
+	div.style.height = '100%';
 	
 	mxUtils.write(div, mxResources.get('fileOpenLocation'));
 	mxUtils.br(div);
@@ -4544,7 +4711,7 @@ var PopupDialog = function(editorUi, url, pre, fallback, hideDialog)
 /**
  * Constructs a new image dialog.
  */
-var ImageDialog = function(editorUi, title, initialValue, fn, ignoreExisting, convertDataUri)
+ var ImageDialog = function(editorUi, title, initialValue, fn, ignoreExisting, convertDataUri, withCrop, initClipPath)
 {
 	convertDataUri = (convertDataUri != null) ? convertDataUri : true;
 	
@@ -4601,6 +4768,8 @@ var ImageDialog = function(editorUi, title, initialValue, fn, ignoreExisting, co
 	inner.appendChild(cross);
 	div.appendChild(inner);
 
+	var clipPath = initClipPath, cW, cH;
+
 	var insertImage = function(newValue, w, h, resize)
 	{
 		var dataUri = newValue.substring(0, 5) == 'data:';
@@ -4626,18 +4795,18 @@ var ImageDialog = function(editorUi, title, initialValue, fn, ignoreExisting, co
 						newValue = editorUi.convertDataUri(newValue);
 					}
 					
-	    				fn(newValue, Math.round(Number(img.width) * s), Math.round(Number(img.height) * s));
-		    		}, function()
-		    		{
-		    			editorUi.spinner.stop();
-		    			fn(null);
+					fn(newValue, Math.round(Number(img.width) * s), Math.round(Number(img.height) * s), clipPath, cW, cH);
+				}, function()
+				{
+					editorUi.spinner.stop();
+					fn(null);
 					editorUi.showError(mxResources.get('error'), mxResources.get('fileNotFound'), mxResources.get('ok'));
-		    		});
+		    	});
 			}
 			else
 			{
 				editorUi.hideDialog();
-				fn(newValue);
+				fn(newValue, null, null, clipPath, cW, cH);
 			}
 		}
 		else
@@ -4647,7 +4816,7 @@ var ImageDialog = function(editorUi, title, initialValue, fn, ignoreExisting, co
 			h = (h == null) ? 100 : h;
 			
 			editorUi.hideDialog();				
-			fn(newValue, w, h);
+			fn(newValue, w, h, clipPath, cW, cH);
 		}
 	};
 	
@@ -4845,25 +5014,6 @@ var ImageDialog = function(editorUi, title, initialValue, fn, ignoreExisting, co
 		btns.appendChild(btn);
 	}
 
-	// Image cropping (experimental)
-	if (!!document.createElement('canvas').getContext && linkInput.value.substring(0, 11) == 'data:image/' &&
-		linkInput.value.substring(0, 14) != 'data:image/svg')
-	{
-		var cropBtn = mxUtils.button(mxResources.get('crop'), function()
-		{
-	    	var dlg = new CropImageDialog(editorUi, linkInput.value, function(image)
-	    	{
-	    		linkInput.value = image;
-	    	});
-	    	
-	    	editorUi.showDialog(dlg.container, 300, 380, true, true);
-			dlg.init();
-		});
-		
-		cropBtn.className = 'geBtn';
-		btns.appendChild(cropBtn);
-	}
-
 	mxEvent.addListener(linkInput, 'keypress', function(e)
 	{
 		if (e.keyCode == 13)
@@ -4871,6 +5021,45 @@ var ImageDialog = function(editorUi, title, initialValue, fn, ignoreExisting, co
 			apply(linkInput.value);
 		}
 	});
+
+	var cropBtn = mxUtils.button(mxResources.get('crop'), function()
+	{
+	   var dlg = new CropImageDialog(editorUi, linkInput.value, clipPath, 
+		   function(clipPath_p, width, height)
+		   {
+			   clipPath = clipPath_p;
+			   cW = width;
+			   cH = height;
+		   });
+	   
+	   editorUi.showDialog(dlg.container, 300, 390, true, true);
+	});
+	
+	if (withCrop)
+ 	{
+ 		cropBtn.className = 'geBtn';
+		btns.appendChild(cropBtn);
+	}
+
+	function updateCropButton()
+	{
+		if (linkInput.value.length > 0)
+		{
+			cropBtn.removeAttribute('disabled');
+		}
+		else
+		{
+			cropBtn.setAttribute('disabled', 'disabled');
+		}
+	};
+
+	mxEvent.addListener(linkInput, 'change', function(e)
+	{
+		clipPath = null;
+		updateCropButton();
+	});
+
+	updateCropButton();
 	
 	var applyBtn = mxUtils.button(mxResources.get('apply'), function()
 	{
@@ -4915,6 +5104,7 @@ var ImageDialog = function(editorUi, title, initialValue, fn, ignoreExisting, co
 var LinkDialog = function(editorUi, initialValue, btnLabel, fn, showPages, showNewWindowOption, linkTarget)
 {
 	var div = document.createElement('div');
+	div.style.height = '100%';
 	mxUtils.write(div, mxResources.get('editLink') + ':');
 	
 	var inner = document.createElement('div');
@@ -4930,7 +5120,7 @@ var LinkDialog = function(editorUi, initialValue, btnLabel, fn, showPages, showN
 	linkInput.setAttribute('placeholder', mxResources.get('dragUrlsHere'));
 	linkInput.setAttribute('type', 'text');
 	linkInput.style.marginTop = '6px';
-	linkInput.style.width = '100%';
+	linkInput.style.width = '97%';
 	linkInput.style.boxSizing = 'border-box';
 	linkInput.style.backgroundImage = 'url(\'' + Dialog.prototype.clearImage + '\')';
 	linkInput.style.backgroundRepeat = 'no-repeat';
@@ -4972,7 +5162,7 @@ var LinkDialog = function(editorUi, initialValue, btnLabel, fn, showPages, showN
 	pageRadio.setAttribute('name', 'geLinkDialogOption');
 
 	var pageSelect = document.createElement('select');
-	pageSelect.style.width = '100%';
+	pageSelect.style.width = '520px';
 
 	var newWindowCheckbox = document.createElement('input');
 	newWindowCheckbox.setAttribute('type', 'checkbox');
@@ -5871,8 +6061,6 @@ var RevisionDialog = function(editorUi, revs, restoreFn)
 						}
 					}, null, null, null, null, null, true, null, mxResources.get('merge'));
 					
-					dlg.textarea.style.width = '600px';
-					dlg.textarea.style.height = '380px';
 					editorUi.showDialog(dlg.container, 620, 460, true, true);
 					dlg.init();
 				}
@@ -7137,6 +7325,9 @@ var FindWindow = function(ui, x, y, w, h, withReplace)
 			substr = mxUtils.htmlEntities(substr);
 			var tagPos = [], p = -1;
 			
+			//Original position (startIndex) counts for \n which is removed when tags are removed, so handle <br> separately
+			str = str.replace(/<br>/ig, '\n');
+
 			while((p = str.indexOf('<', p + 1)) > -1)
 			{
 				tagPos.push(p);
@@ -7179,7 +7370,7 @@ var FindWindow = function(ui, x, y, w, h, withReplace)
 				tagDiff += tags[i].length;
 			}
 			
-			return newStr;
+			return newStr.replace(/\n/g, '<br>');
 		};
 		
 		var replaceFindBtn = mxUtils.button(mxResources.get('replFind'), function()
@@ -7456,7 +7647,6 @@ var FindWindow = function(ui, x, y, w, h, withReplace)
 var FreehandWindow = function(editorUi, x, y, w, h)
 {
 	var graph = editorUi.editor.graph;
-	var propertyName = 'tags';
 
 	var div = document.createElement('div');
 	div.style.textAlign = 'center';
@@ -7551,159 +7741,65 @@ var FreehandWindow = function(editorUi, x, y, w, h)
 var TagsWindow = function(editorUi, x, y, w, h)
 {
 	var graph = editorUi.editor.graph;
-	var propertyName = 'tags';
 
-	var div = document.createElement('div');
-	div.style.userSelect = 'none';
-	div.style.overflow = 'hidden';
-	div.style.padding = '10px';
-	div.style.height = '100%';
-	
-	var searchInput = document.createElement('input');
-	searchInput.setAttribute('placeholder', mxResources.get('allTags'));
-	searchInput.setAttribute('type', 'text');
-	searchInput.style.marginTop = '4px';
-	searchInput.style.width = '260px';
-	searchInput.style.fontSize = '12px';
-	searchInput.style.borderRadius = '4px';
-	searchInput.style.padding = '6px';
-	div.appendChild(searchInput);
-	
-	if (!editorUi.isOffline() || mxClient.IS_CHROMEAPP)
+	var tagsComponent = editorUi.editor.graph.createTagsDialog(mxUtils.bind(this, function()
 	{
-		searchInput.style.width = '240px';
-		var elt = editorUi.menus.createHelpLink('https://www.diagrams.net/doc/faq/tags');
-		elt.firstChild.style.marginBottom = '6px';
-		elt.style.marginLeft = '6px';
-		div.appendChild(elt);
-	}
-	
-	mxEvent.addListener(searchInput, 'dblclick', function()
+		return this.window.isVisible();
+	}), null, function(allTags, updateFn)
 	{
-		var dlg = new FilenameDialog(editorUi, propertyName, mxResources.get('ok'), mxUtils.bind(this, function(name)
-		{
-			if (name != null && name.length > 0)
-			{
-				propertyName = name;
-			}
-		}), mxResources.get('enterPropertyName'));
-		editorUi.showDialog(dlg.container, 300, 80, true, true);
-		dlg.init();
-	});
-	
-	searchInput.setAttribute('title', mxResources.get('doubleClickChangeProperty'));
-
-	function searchCells(cells)
-	{
-		return graph.getCellsForTags(searchInput.value.split(' '), cells, propertyName, true);
-	};
-
-	function setCellsVisible(cells, visible)
-	{
-		graph.setCellsVisible(cells, visible);
-	};
-	
-	mxUtils.br(div);
-
-	var hideBtn = mxUtils.button(mxResources.get('hide'), function()
-	{
-		setCellsVisible(searchCells(), false);
-	});
-	
-	hideBtn.setAttribute('title', mxResources.get('hide'));
-	hideBtn.style.marginTop = '8px';
-	hideBtn.style.marginRight = '4px';
-	hideBtn.className = 'geBtn';
-	
-	div.appendChild(hideBtn);
-
-	var showBtn = mxUtils.button(mxResources.get('show'), function()
-	{
-		var cells = searchCells();
-		setCellsVisible(cells, true);
-		
 		if (graph.isEnabled())
 		{
-			// Ignores layers for selection
-			var temp = [];
-			
-			for (var i = 0; i < cells.length; i++)
+			var dlg = new FilenameDialog(editorUi, '', mxResources.get('add'), function(newValue)
 			{
-				if (!graph.isCellLocked(cells[i]) &&
-					(graph.model.isVertex(cells[i]) ||
-					graph.model.isEdge(cells[i])))
+				editorUi.hideDialog();
+				
+				if (newValue != null && newValue.length > 0)
 				{
-					temp.push(cells[i]);
+					var temp = newValue.split(' ');
+					var tags = [];
+
+					for (var i = 0; i < temp.length; i++)
+					{
+						var token = mxUtils.trim(temp[i]);
+
+						if (token != '' && mxUtils.indexOf(
+							allTags, token) < 0)
+						{
+							tags.push(token);
+						}
+					}
+
+					if (tags.length > 0)
+					{
+						if (graph.isSelectionEmpty())
+						{
+							updateFn(allTags.concat(tags));
+						}
+						else
+						{
+							graph.addTagsForCells(graph.getSelectionCells(), tags);
+						}
+					}
 				}
-			}
-			
-			graph.setSelectionCells(temp);
-		}
-		else
-		{
-			for (var i = 0; i < cells.length; i++)
-			{
-				graph.highlightCell(cells[i]);
-			}
-		}
-	});
-	
-	showBtn.setAttribute('title', mxResources.get('show'));
-	showBtn.style.marginTop = '8px';
-	showBtn.style.marginRight = '4px';
-	showBtn.className = 'geBtn';
-	
-	div.appendChild(showBtn);
-	
-	var action = editorUi.actions.get('tags');
+			}, mxResources.get('enterValue') + ' (' + mxResources.get('tags') + ')');
 
-	var btn = mxUtils.button(mxResources.get('close'), function()
-	{
-		action.funct();
-	});
-	
-	btn.setAttribute('title', mxResources.get('close') + ' (Enter/Esc)');
-	btn.style.marginTop = '8px';
-	btn.className = 'geBtn gePrimaryBtn';
-	
-	div.appendChild(btn);
-		
-	mxEvent.addListener(searchInput, 'keyup', function(evt)
-	{
-		// Ctrl or Cmd keys
-		if (evt.keyCode == 13 || evt.keyCode == 27)
-		{
-			action.funct();
+			editorUi.showDialog(dlg.container, 300, 80, true, true);
+			dlg.init();
 		}
 	});
 
+	var div = tagsComponent.div;
 	this.window = new mxWindow(mxResources.get('tags'), div, x, y, w, h, true, true);
+	this.window.minimumSize = new mxRectangle(0, 0, 212, 120);
 	this.window.destroyOnClose = false;
 	this.window.setMaximizable(false);
-	this.window.setResizable(false);
+	this.window.setResizable(true);
 	this.window.setClosable(true);
-	
+
 	this.window.addListener('show', mxUtils.bind(this, function()
 	{
+		tagsComponent.refresh();
 		this.window.fit();
-		
-		if (this.window.isVisible())
-		{
-			searchInput.focus();
-			
-			if (mxClient.IS_GC || mxClient.IS_FF || document.documentMode >= 5)
-			{
-				searchInput.select();
-			}
-			else
-			{
-				document.execCommand('selectAll', false, null);
-			}
-		}
-		else
-		{
-			graph.container.focus();
-		}
 	}));
 	
 	this.window.setLocation = function(x, y)
@@ -8062,6 +8158,24 @@ var MoreShapesDialog = function(editorUi, expanded, entries)
 		buttons.style.height = '60px';
 		buttons.style.lineHeight = '52px';
 		
+		var labels = document.createElement('input');
+		labels.setAttribute('type', 'checkbox');
+		labels.style.position = 'relative';
+		labels.style.top = '1px';
+		labels.checked = editorUi.sidebar.sidebarTitles;
+		labels.defaultChecked = labels.checked;
+		buttons.appendChild(labels);
+		var span = document.createElement('span');
+		mxUtils.write(span, ' ' + mxResources.get('labels'));
+		span.style.paddingRight = '20px';
+		buttons.appendChild(span);
+		
+		mxEvent.addListener(span, 'click', function(evt)
+		{
+			labels.checked = !labels.checked;
+			mxEvent.consume(evt);
+		});
+
 		var cb = document.createElement('input');
 		cb.setAttribute('type', 'checkbox');
 		
@@ -8071,6 +8185,8 @@ var MoreShapesDialog = function(editorUi, expanded, entries)
 			span.style.paddingRight = '20px';
 			span.appendChild(cb);
 			mxUtils.write(span, ' ' + mxResources.get('rememberThisSetting'));
+			cb.style.position = 'relative';
+			cb.style.top = '1px';
 			cb.checked = true;
 			cb.defaultChecked = true;
 			
@@ -8106,8 +8222,30 @@ var MoreShapesDialog = function(editorUi, expanded, entries)
 					libs.push(lib);
 				}
 			}
+
+			// Redirects scratchpad and search entries
+			if (urlParams['sketch'] == '1' && editorUi.isSettingsEnabled())
+			{
+				var idx = mxUtils.indexOf(libs, '.scratchpad');
+
+				if ((editorUi.scratchpad != null) != (idx >= 0 && libs.splice(idx, 1).length > 0))
+				{
+					editorUi.toggleScratchpad();
+				}
+
+				// Handles search after scratchpad
+				idx = mxUtils.indexOf(libs, 'search');
+				mxSettings.settings.search = (idx >= 0 && libs.splice(idx, 1).length > 0);
+				editorUi.sidebar.showPalette('search', mxSettings.settings.search);
+
+				if (cb.checked)
+				{
+					mxSettings.save();
+				}
+			}
 			
 			editorUi.sidebar.showEntries(libs.join(';'), cb.checked, true);
+			editorUi.setSidebarTitles(labels.checked, cb.checked);
 		});
 		applyBtn.className = 'geBtn gePrimaryBtn';
 		
@@ -8207,11 +8345,11 @@ var MoreShapesDialog = function(editorUi, expanded, entries)
 		}
 
 		div.appendChild(libFS);
-		
+
 		var remember = document.createElement('div');
 		remember.style.marginTop = '18px';
 		remember.style.textAlign = 'center';
-		
+
 		var cb = document.createElement('input');
 		
 		if (isLocalStorage)
@@ -8284,13 +8422,16 @@ var PluginsDialog = function(editorUi, addFn, delFn)
 	var div = document.createElement('div');
 	var inner = document.createElement('div');
 	
-	inner.style.height = '120px';
+	inner.style.height = '180px';
 	inner.style.overflow = 'auto';
 
 	var plugins = mxSettings.getPlugins().slice();
+	var changed = false;
 	
 	function refresh()
 	{
+		changed = true;
+
 		if (plugins.length == 0)
 		{
 			inner.innerHTML = mxUtils.htmlEntities(mxResources.get('noPlugins'));
@@ -8340,8 +8481,9 @@ var PluginsDialog = function(editorUi, addFn, delFn)
 	
 	div.appendChild(inner);
 	refresh();
+	changed = false;
 
-	var addBtn = mxUtils.button(mxResources.get('add') + '...', addFn != null? function()
+	var addBtn = mxUtils.button(mxResources.get('add'), addFn != null? function()
 	{
 		addFn(function(newPlugin)
 		{
@@ -8437,10 +8579,17 @@ var PluginsDialog = function(editorUi, addFn, delFn)
 	
 	var applyBtn = mxUtils.button(mxResources.get('apply'), function()
 	{
-		mxSettings.setPlugins(plugins);
-		mxSettings.save();
-		editorUi.hideDialog();
-		editorUi.alert(mxResources.get('restartForChangeRequired'));
+		if (changed)
+		{
+			mxSettings.setPlugins(plugins);
+			mxSettings.save();
+			editorUi.hideDialog();
+			editorUi.alert(mxResources.get('restartForChangeRequired'));
+		}
+		else
+		{
+			editorUi.hideDialog();
+		}	
 	});
 	
 	applyBtn.className = 'geBtn gePrimaryBtn';
@@ -8481,133 +8630,330 @@ var PluginsDialog = function(editorUi, addFn, delFn)
 	this.container = div;
 };
 
-var CropImageDialog = function(editorUi, image, fn) 
+var CropImageDialog = function(editorUi, image, clipPath, fn) 
 {
+	var IMAGE_SIZE = 300;
 	var div = document.createElement('div');
-	
-	var croppieDiv = document.createElement('div');
-	croppieDiv.style.width = '300px';
-	croppieDiv.style.height = '300px';
-	div.appendChild(croppieDiv);
-	var croppie = null;
-	
-	function createCroppie(isCircle)
+
+	var elt = document.createElement('div');
+	elt.style.height = IMAGE_SIZE + 'px';
+	elt.style.width = IMAGE_SIZE + 'px';
+	elt.style.display = 'inline-flex';
+	elt.style.justifyContent = 'center';
+	elt.style.alignItems = 'center';
+	elt.style.position = 'absolute';
+	var img = document.createElement('img');
+
+	img.onload = init;
+	img.onerror = function ()
 	{
-		if (croppie != null)
+		img.onload = null;
+		img.src = Editor.errorImage;
+	}
+
+	img.setAttribute('src', image);
+	img.style.maxWidth = IMAGE_SIZE + 'px';
+	img.style.maxHeight = IMAGE_SIZE + 'px';
+	elt.appendChild(img);
+	div.appendChild(elt);
+
+	var croppingDiv = document.createElement('div');
+	croppingDiv.style.width = IMAGE_SIZE + 'px';
+	croppingDiv.style.height = IMAGE_SIZE + 'px';
+	croppingDiv.style.overflow = 'hidden';
+	croppingDiv.style.backgroundColor = '#fff9';
+	div.appendChild(croppingDiv);
+
+	var cropGraph, cropCell, arcSizeVal = 5, initGeo = new mxGeometry(100, 100, 100, 100)
+		, commonStyle = 'shape=image;fillColor=none;rotatable=0;cloneable=0;deletable=0;image=' + 
+						image.replace(';base64', '') + ';clipPath=';
+
+	function init()
+	{
+		cropGraph = new Graph(croppingDiv);
+		cropGraph.autoExtend = false;
+		cropGraph.autoScroll = false;
+		cropGraph.setGridEnabled(false);
+		cropGraph.setEnabled(true);
+		cropGraph.setPanning(false);
+		cropGraph.setConnectable(false);
+		cropGraph.getRubberband().setEnabled(false);
+		cropGraph.graphHandler.allowLivePreview = false;
+
+		var origCreateVertexHandler = cropGraph.createVertexHandler;
+
+		cropGraph.createVertexHandler = function()
 		{
-			croppie.destroy();
+			var handler = origCreateVertexHandler.apply(this, arguments);
+			handler.livePreview = false;
+			return handler;
 		}
+
+		cropCell = new mxCell('', initGeo.clone(), '');
+
+		if (clipPath != null)
+		{
+			//Find position and size of cropCell
+			try
+			{
+				if (clipPath.substring(0, 5) == 'inset')
+				{
+					var geo = cropCell.geometry;
+					var imgW = img.width;
+					var imgH = img.height;
+					var imgX = (IMAGE_SIZE - imgW) / 2;
+					var imgY = (IMAGE_SIZE - imgH) / 2;
+	
+					var tokens = clipPath.match(/\(([^)]+)\)/)[1].split(/[ ,]+/);
+
+					var top = parseFloat(tokens[0]);
+					var right = parseFloat(tokens[1]);
+					var bottom = parseFloat(tokens[2]);
+					var left = parseFloat(tokens[3]);
+
+					if (isFinite(top) && isFinite(right) && isFinite(bottom) && isFinite(left))
+					{
+						geo.x = left / 100 * imgW + imgX;
+						geo.y = top / 100 * imgH + imgY;
+						geo.width = (100 - right) / 100 * imgW + imgX - geo.x;
+						geo.height = (100 - bottom) / 100 * imgH + imgY - geo.y;
+
+						if (tokens[4] == 'round')
+						{
+							if (tokens[5] == '50%')
+							{
+								ellipseInput.setAttribute('checked', 'checked');
+							}
+							else
+							{
+								arcSizeVal = parseInt(tokens[5]);
+								arcSize.value = arcSizeVal;
+								roundedInput.setAttribute('checked', 'checked');
+								arcSizeDiv.style.visibility = 'visible';
+							}
+						}
+						else
+						{
+							rectInput.setAttribute('checked', 'checked');
+						}
+					}
+					else //Invalid clipPath
+					{
+						clipPath = null;
+					}
+				}
+				else //The dialog supports inset only
+				{
+					clipPath = null;
+				}
+			}
+			catch (e){} //Ignore
+		}
+
+		cropCell.style = getCropCellStyle(clipPath);
+	   	cropCell.vertex = true;
+		cropGraph.addCell(cropCell, null, null, null, null);
+		cropGraph.selectAll();
+
+		function updateCropCell()
+		{
+			cropGraph.model.setStyle(cropCell, getCropCellStyle());
+		};
+
+		cropGraph.addListener(mxEvent.CELLS_MOVED, updateCropCell);
+
+		cropGraph.addListener(mxEvent.CELLS_RESIZED, updateCropCell);
+
+		var origMouseUp = cropGraph.graphHandler.mouseUp;
+		var origMouseDown = cropGraph.graphHandler.mouseDown;
+
+		cropGraph.graphHandler.mouseUp = function()
+		{
+			origMouseUp.apply(this, arguments);
+			croppingDiv.style.backgroundColor = '#fff9';
+		};
+
+		cropGraph.graphHandler.mouseDown = function()
+		{
+			origMouseDown.apply(this, arguments);
+			croppingDiv.style.backgroundColor = '';
+		};
+
+		cropGraph.dblClick = function(){} //Disable text adding
+
+		var origChangeSelection = cropGraph.getSelectionModel().changeSelection;
+
+		//Prevent deselection
+		cropGraph.getSelectionModel().changeSelection = function()
+		{
+			origChangeSelection.call(this, [cropCell], [cropCell]);
+		};
+	};
+
+	var rectInput = document.createElement('input');
+	rectInput.setAttribute('type', 'radio');
+	rectInput.setAttribute('id', 'croppingRect');
+	rectInput.setAttribute('name', 'croppingShape');
+	rectInput.setAttribute('checked', 'checked');
+	rectInput.style.margin = '5px';
+	div.appendChild(rectInput);
+	
+	var rectLbl = document.createElement('label');
+	rectLbl.setAttribute('for', 'croppingRect');
+	mxUtils.write(rectLbl, mxResources.get('rectangle'));
+	div.appendChild(rectLbl);
+
+	var roundedInput = document.createElement('input');
+	roundedInput.setAttribute('type', 'radio');
+	roundedInput.setAttribute('id', 'croppingRounded');
+	roundedInput.setAttribute('name', 'croppingShape');
+	roundedInput.style.margin = '5px';
+	div.appendChild(roundedInput);
+	
+	var roundedLbl = document.createElement('label');
+	roundedLbl.setAttribute('for', 'croppingRounded');
+	mxUtils.write(roundedLbl, mxResources.get('rounded'));
+	div.appendChild(roundedLbl);
+
+	var ellipseInput = document.createElement('input');
+	ellipseInput.setAttribute('type', 'radio');
+	ellipseInput.setAttribute('id', 'croppingEllipse');
+	ellipseInput.setAttribute('name', 'croppingShape');
+	ellipseInput.style.margin = '5px';
+	div.appendChild(ellipseInput);
+	
+	var ellipseLbl = document.createElement('label');
+	ellipseLbl.setAttribute('for', 'croppingEllipse');
+	mxUtils.write(ellipseLbl, mxResources.get('ellipse'));
+	div.appendChild(ellipseLbl);
+
+	function calcClipPath() 
+	{
+		var isRounded = roundedInput.checked;
+		var isEllipse = ellipseInput.checked;
+
+		var geo = cropCell.geometry;
+		var imgW = img.width;
+		var imgH = img.height;
+		var imgX = (IMAGE_SIZE - imgW) / 2;
+		var imgY = (IMAGE_SIZE - imgH) / 2;
+
+		var left, right, top, bottom;
 		
-		if (isCircle)
+		//prevent coords outside the image
+		if (geo.x < imgX)
 		{
-			croppie = new Croppie(croppieDiv, {
-				viewport: { width: 150, height: 150, type: 'circle' },
-				enableExif: true,
-			    showZoomer: false,
-			    enableResize: false,
-			    enableOrientation: true
-			});
-			
-			croppie.bind({
-			    url: image
-			});
+			geo.width -= (imgX - geo.x);
+			geo.x = imgX;
 		}
-		else
+		else if (geo.x + geo.width > imgX + imgW)
 		{
-			croppie = new Croppie(croppieDiv, {
-				viewport: { width: 150, height: 150, type: 'square' },
-				enableExif: true,
-			    showZoomer: false,
-			    enableResize: true,
-			    enableOrientation: true
-			});
-			
-			croppie.bind({
-			    url: image
-			});
-		}	
-	};
-	
-	this.init = function()
+			geo.width = imgX + imgW - geo.x;
+			geo.x = Math.min(geo.x, imgX + imgW);
+		}
+
+		if (geo.y < imgY)
+		{
+			geo.height -= (imgY - geo.y);
+			geo.y = imgY;
+		}
+		else if (geo.y + geo.height > imgY + imgH)
+		{
+			geo.height = imgY + imgH - geo.y;
+			geo.y = Math.min(geo.y, imgY + imgH);
+		}
+
+		var left = (geo.x - imgX) / imgW * 100;
+		var right = 100 - (geo.x + geo.width - imgX) / imgW * 100;
+		var top = (geo.y - imgY) / imgH * 100;
+		var bottom = 100 - (geo.y + geo.height - imgY) / imgH * 100;
+
+		//Use inset for circle also since it uses percentages from 4 sides and this scales no matter the shape of the image
+		//Using circle which is based on a single point to position (center) moves when the image is scaled and/or aspect is changed
+		return 'inset(' + mxUtils.format(top) + '% ' + mxUtils.format(right) + '% ' + mxUtils.format(bottom) + '% ' + mxUtils.format(left) + '%' + 
+							(isRounded? ' round ' + arcSizeVal + '%' : (isEllipse? ' round 50%' : '')) + ')';
+	}
+
+	function typeChanged(noGeoReset)
 	{
-		createCroppie();
-	};
+		if (noGeoReset !== true)
+		{
+			cropGraph.model.setGeometry(cropCell, initGeo.clone());
+			arcSizeVal = 5;
+			arcSize.value = arcSizeVal;
+		}
 
-	var circleInput = document.createElement('input');
-	circleInput.setAttribute('type', 'checkbox');
-	circleInput.setAttribute('id', 'croppieCircle');
-	circleInput.style.margin = '5px';
-	div.appendChild(circleInput);
-	
-	var circleLbl = document.createElement('label');
-	circleLbl.setAttribute('for', 'croppieCircle');
-	mxUtils.write(circleLbl, mxResources.get('circle'));
-	div.appendChild(circleLbl);
-	
-	var wrap, btnLeft, btnRight, iLeft, iRight;
+		cropGraph.model.setStyle(cropCell, getCropCellStyle());
+		cropGraph.selectAll();
+		arcSizeDiv.style.visibility = roundedInput.checked ? 'visible' : 'hidden';
+	}
 
-    wrap = document.createElement('div');
-    btnLeft = document.createElement('button');
-    btnRight = document.createElement('button');
-
-    wrap.appendChild(btnLeft);
-    wrap.appendChild(btnRight);
-
-    iLeft = document.createElement('i');
-    iRight = document.createElement('i');
-    btnLeft.appendChild(iLeft);
-    btnRight.appendChild(iRight);
-
-    wrap.className = 'cr-rotate-controls';
-    wrap.style.float = 'right';
-    wrap.style.position = 'inherit';
-    btnLeft.className = 'cr-rotate-l';
-    btnRight.className = 'cr-rotate-r';
-    
-    div.appendChild(wrap);
-
-    btnLeft.addEventListener('click', function () 
-    {
-    	croppie.rotate(-90);
-    });
-    
-    btnRight.addEventListener('click', function () 
-    {
-    	croppie.rotate(90);
-    });
-	
-	mxEvent.addListener(circleInput, 'change', function()
+	function getCropCellStyle(clipPath)
 	{
-		createCroppie(this.checked);
+		return commonStyle + (clipPath? clipPath : calcClipPath());
+	}
+
+	mxEvent.addListener(rectInput, 'change', typeChanged);
+	mxEvent.addListener(roundedInput, 'change', typeChanged);
+	mxEvent.addListener(ellipseInput, 'change', typeChanged);
+	
+	//Arc size slider
+	var arcSizeDiv = document.createElement('div');
+	arcSizeDiv.style.textAlign = 'center';
+	arcSizeDiv.style.visibility = 'hidden';
+
+	var arcSize = document.createElement('input');
+	arcSize.setAttribute('type', 'range');
+	arcSize.setAttribute('min', '1');
+	arcSize.setAttribute('max', '49');
+	arcSize.setAttribute('value', arcSizeVal);
+	arcSize.setAttribute('title', mxResources.get('arcSize'));
+	arcSizeDiv.appendChild(arcSize);
+
+	div.appendChild(arcSizeDiv);
+
+	mxEvent.addListener(arcSize, 'change', function()
+	{
+		arcSizeVal = this.value;
+		typeChanged(true);
 	});
-	
+
 	var cancelBtn = mxUtils.button(mxResources.get('cancel'), function()
 	{
 		editorUi.hideDialog();
 	});
+
 	cancelBtn.className = 'geBtn';
 	
 	var applyBtn = mxUtils.button(mxResources.get('apply'), function()
 	{
-		croppie.result({type: 'base64', size: 'original'}).then(function(base64Img) {
-			fn(base64Img);
-			editorUi.hideDialog();
-		});
+		fn(calcClipPath(), cropCell.geometry.width, cropCell.geometry.height);
+		editorUi.hideDialog();
 	});
 	
 	applyBtn.className = 'geBtn gePrimaryBtn';
 	
+	var resetBtn = mxUtils.button(mxResources.get('reset'), function()
+	{
+		fn(null, img.width, img.height);
+		editorUi.hideDialog();
+	});
+	
+	resetBtn.className = 'geBtn';
+
 	var buttons = document.createElement('div');
-	buttons.style.marginTop = '20px';
+	buttons.style.marginTop = '10px';
 	buttons.style.textAlign = 'right';
 
 	if (editorUi.editor.cancelFirst)
 	{
 		buttons.appendChild(cancelBtn);
+		buttons.appendChild(resetBtn);
 		buttons.appendChild(applyBtn);
 	}
 	else
 	{
+		buttons.appendChild(resetBtn);
 		buttons.appendChild(applyBtn);
 		buttons.appendChild(cancelBtn);
 	}
@@ -9072,6 +9418,7 @@ var LibraryDialog = function(editorUi, name, library, initialImages, file, mode)
 					wrapper.setAttribute('draggable', 'true');
 					wrapper.style.display = 'inline-block';
 					wrapper.style.position = 'relative';
+					wrapper.style.padding = '0 12px';
 					wrapper.style.cursor = 'move';
 					mxUtils.setPrefixedStyle(wrapper.style, 'transition', 'transform .1s ease-in-out');
 					
@@ -9103,7 +9450,7 @@ var LibraryDialog = function(editorUi, name, library, initialImages, file, mode)
 					}
 					
 					var rem = document.createElement('img');
-					rem.setAttribute('src', Editor.closeImage);
+					rem.setAttribute('src', Editor.closeBlackImage);
 					rem.setAttribute('border', '0');
 					rem.setAttribute('title', mxResources.get('delete'));
 					rem.setAttribute('align', 'top');
@@ -9162,7 +9509,7 @@ var LibraryDialog = function(editorUi, name, library, initialImages, file, mode)
 					label.style.bottom = '-18px';
 					label.style.left = '10px';
 					label.style.right = '10px';
-					label.style.backgroundColor = Editor.isDarkMode() ? '#2a2a2a' : '#ffffff';
+					label.style.backgroundColor = Editor.isDarkMode() ? Editor.darkColor : '#ffffff';
 					label.style.overflow = 'hidden';
 					label.style.textAlign = 'center';
 					
@@ -9565,7 +9912,7 @@ var LibraryDialog = function(editorUi, name, library, initialImages, file, mode)
 						var dlg = new EmbedDialog(editorUi, window.location.protocol + '//' +
 							window.location.host + '/' + search, null, null, null, null,
 							'Check out the library I made using @drawio');
-						editorUi.showDialog(dlg.container, 440, 240, true);
+						editorUi.showDialog(dlg.container, 450, 240, true);
 						dlg.init();
 					}
 					else if (file.constructor == DriveLibrary)
@@ -9932,7 +10279,8 @@ var EditShapeDialog = function(editorUi, cell, title, w, h)
 	this.container = table;
 };
 
-var CustomDialog = function(editorUi, content, okFn, cancelFn, okButtonText, helpLink, buttonsContent, hideCancel, cancelButtonText, hideAfterOKFn)
+var CustomDialog = function(editorUi, content, okFn, cancelFn, okButtonText, helpLink,
+		buttonsContent, hideCancel, cancelButtonText, hideAfterOKFn, customButtons)
 {
 	var div = document.createElement('div');
 	div.appendChild(content);
@@ -10011,6 +10359,28 @@ var CustomDialog = function(editorUi, content, okFn, cancelFn, okButtonText, hel
 		btns.appendChild(cancelBtn);
 	}
 
+	if (customButtons != null)
+	{
+		for (var i = 0; i < customButtons.length; i++)
+		{
+			(function(label, fn, title)
+			{
+				var customBtn = mxUtils.button(label, function(e)
+				{
+					fn(e);
+				});
+
+				if (title != null)
+				{
+					customBtn.setAttribute('title', title);
+				}
+
+				customBtn.className = 'geBtn';
+				btns.appendChild(customBtn);
+			})(customButtons[i][0], customButtons[i][1], customButtons[i][2]);
+		}
+	}
+	
 	div.appendChild(btns);
 
 	this.cancelBtn = cancelBtn;
@@ -11678,7 +12048,7 @@ var FontDialog = function(editorUi, curFontname, curUrl, curType, fn)
 	td.style.whiteSpace = 'nowrap';
 	td.style.fontSize = '10pt';
 	td.style.fontWeight = 'bold';
-	
+
 	var webFontRadio = document.createElement('input');
 	webFontRadio.style.cssText = 'margin-right:8px;margin-bottom:8px;';
 	webFontRadio.setAttribute('value', 'webfonts');
@@ -11693,7 +12063,11 @@ var FontDialog = function(editorUi, curFontname, curUrl, curType, fn)
 	td.appendChild(label);
 	
 	row.appendChild(td);
-	tbody.appendChild(row);
+
+	if (Editor.enableWebFonts)
+	{
+		tbody.appendChild(row);
+	}
 	
 	row = document.createElement('tr');
 	
@@ -11710,7 +12084,14 @@ var FontDialog = function(editorUi, curFontname, curUrl, curType, fn)
 
 	if (curType == 'w')
 	{
-		webFontInput.setAttribute('value', curFontname);
+		if (Editor.enableWebFonts)
+		{
+			webFontInput.setAttribute('value', curFontname);
+		}
+		else
+		{
+			sysFontInput.setAttribute('value', curFontname);
+		}
 	}
 	
 	webFontInput.style.marginLeft = '4px';
@@ -11720,7 +12101,11 @@ var FontDialog = function(editorUi, curFontname, curUrl, curType, fn)
 	td = document.createElement('td');
 	td.appendChild(webFontInput);
 	row.appendChild(td);
-	tbody.appendChild(row);
+
+	if (Editor.enableWebFonts)
+	{
+		tbody.appendChild(row);
+	}
 	
 	row = document.createElement('tr');
 	
@@ -11742,7 +12127,11 @@ var FontDialog = function(editorUi, curFontname, curUrl, curType, fn)
 	td = document.createElement('td');
 	td.appendChild(webFontUrlInput);
 	row.appendChild(td);
-	tbody.appendChild(row);
+
+	if (Editor.enableWebFonts)
+	{
+		tbody.appendChild(row);
+	}
 	
 	this.init = function()
 	{
@@ -11752,7 +12141,7 @@ var FontDialog = function(editorUi, curFontname, curUrl, curType, fn)
 		{
 			input = googleFontInput;
 		}
-		else if (curType == 'w')
+		else if (curType == 'w' && Editor.enableWebFonts)
 		{
 			input = webFontInput;
 		}
@@ -11992,7 +12381,7 @@ AspectDialog.prototype.init = function()
 	}
 };
 
-AspectDialog.prototype.createViewer = function(container, pageNode, layerId)
+AspectDialog.prototype.createViewer = function(container, pageNode, layerId, defaultBackground)
 {
 	mxEvent.disableContextMenu(container);
 	container.style.userSelect = 'none';
@@ -12013,7 +12402,7 @@ AspectDialog.prototype.createViewer = function(container, pageNode, layerId)
 		
 		if (bg == null || bg == '' || bg == mxConstants.NONE)
 		{
-			bg = '#ffffff';
+			bg = (defaultBackground != null) ? defaultBackground : '#ffffff';
 		}
 		
 		container.style.backgroundColor = bg;
@@ -12135,7 +12524,7 @@ var FilePropertiesDialog = function(editorUi)
 	
 	var file = editorUi.getCurrentFile();
 	var filename = (file != null && file.getTitle() != null) ?
-		file.getTitle() : this.editorUi.defaultFilename;
+		file.getTitle() : editorUi.defaultFilename;
 	var isPng = /(\.png)$/i.test(filename);
 	var apply = null;
 
